@@ -1,0 +1,44 @@
+Package: infuse
+Type: Package
+Title: Net Treatment Benefit and Win Ratio Statistics Using Influence Functions
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Alberto", "Alvarez-Iglesias",
+      email = "alberto.alvarez-iglesias@universityofgalway.ie",
+      role = c("aut", "cre")
+    )
+  )
+Description: A comprehensive framework for Net Treatment Benefit and Win 
+    Ratio statistics using an intuitive 'Sow-Harvest-Reap' workflow. The package 
+    provides tools to 'sow' data by preprocessing survival, continuous, 
+    and binary outcomes with support for Generalized Pareto Distribution 
+    (GPD) tail extensions. It 'harvests' point estimates and 
+    observation-level influence functions for favorable, unfavorable, net 
+    benefit, and win ratio metrics via a high-performance C++ engine. 
+    Finally, it 'reaps' statistical inference (standard errors, 
+    confidence intervals, and p-values) and supports Non-Prioritized 
+    Outcome (NPO) synthesis through weighted influence function 
+    aggregation. This approach specifically accounts for the covariance 
+    between multiple endpoints and provides robust variance estimation in 
+    the presence of censoring.
+License: GPL (>= 3)
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+URL: https://github.com/AlbertoAlvarezIglesias2019/infuse/settings/pages
+BugReports: https://github.com/AlbertoAlvarezIglesias2019/infuse/issues
+LinkingTo: 
+    Rcpp
+Imports: 
+    ggplot2,
+    Rcpp,
+    stringr,
+    survival
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+
