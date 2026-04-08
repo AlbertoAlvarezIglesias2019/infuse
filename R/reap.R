@@ -82,251 +82,132 @@
 #' @export
 reap <- function(iii, conf_level = 0.95,w = NULL) {
 
+  types_map <- attr(iii, "var_types")
+
   # --- 1. Setup & Metadata ---
   n_vars <- length(iii$theta$Variable)
   alp       <- 1 - conf_level
   zz        <- qnorm(1 - alp / 2)
   responses <- iii$theta$Variable
 
-  IF_x <- iii$IF_x
-  IF_y <- iii$IF_y
+  IF_x <- iii$IF_x %>% mutate(XY="x")
+  IF_y <- iii$IF_y %>% mutate(XY="y")
   PE <- iii$theta
 
-  temp <- lapply(responses,function(xxx){
+  IF <- rbind(IF_x,IF_y)
 
-    ifx <- IF_x %>% filter(Variable==xxx) #%>% select(xweights,ce,f)
-    ify <- IF_y %>% filter(Variable==xxx) #%>% select(yweights,ce,f)
-    pe <- PE %>% filter(Variable==xxx) #%>% pull(f)
-    #nx <- sum(!is.na(ifx$ce),na.rm=TRUE)
-    #ny <- sum(!is.na(ify$ce),na.rm=TRUE)
-    nx <- sum(ifx$ce,na.rm=TRUE)
-    ny <- sum(ify$ce,na.rm=TRUE)
-    #nx<-1
-    #ny<-1
-    wx <- ifx$xweights
-    wy <- ify$yweights
+  #######################
+  ### Set up NPO outcome
+  #######################
+  ww_vec <- if (is.null(w)) rep(1 / n_vars, n_vars) else w
+  wdat   <- data.frame(Variable = responses, ww = ww_vec)
 
-    ## FAVORABLE
-    #taux <- c_mean(ifx$f^2,ifx$ce)
-    #tauy <- c_mean(ify$f^2,ifx$ce)
-    taux <- sum(ifx$f^2 * wx,na.rm=TRUE)
-    tauy <- sum(ify$f^2 * wy,na.rm=TRUE)
-    se <- sqrt(taux/nx + tauy/ny)
-    fff <- data.frame(Variable=xxx,E=pe$f,SE=se,
-                         LB = pe$f - zz * se,
-                         UB = pe$f + zz * se,
-                      PV = 2 * (1 - pnorm(abs(pe$f/se))),
-                         Metric = "Favorable")
+  ooo0 <- IF %>% left_join(wdat,by="Variable") %>%
+    pivot_longer(f:w) %>%
+    mutate(tt = sqrt(weights) * value *ww) %>%
+    group_by(ID,name,XY) %>%
+    summarise(iiff = sum(tt,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
+    mutate(Variable ="NPO")
 
-    ## UNFAVORABLE
-    #taux <- c_mean(ifx$u^2,ifx$ce)
-    #tauy <- c_mean(ify$u^2,ifx$ce)
-    taux <- sum(ifx$u^2 * wx,na.rm=TRUE)
-    tauy <- sum(ify$u^2 * wy,na.rm=TRUE)
-    se <- sqrt(taux/nx + tauy/ny)
-    uuu <- data.frame(Variable=xxx,E=pe$u,SE=se,
-                         LB = pe$u - zz * se,
-                         UB = pe$u + zz * se,
-                      PV = 2 * (1 - pnorm(abs(pe$u/se))),
-                         Metric = "Unfavorable")
+  nn0 <- IF %>%
+    group_by(ID,XY) %>%
+    summarise(c = prod(ce,na.rm=TRUE),.groups = "drop" ) %>%
+    group_by(XY) %>%
+    summarise(n = sum(c,na.rm=TRUE),.groups = "drop") %>%
+    mutate(Variable ="NPO") %>%
+    pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
+
+  pe0 <- PE %>% left_join(wdat,by="Variable") %>%
+    pivot_longer(f:w) %>%
+    group_by(name) %>%
+    summarise(pe = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
+    mutate(Variable = "NPO")
 
 
-    ## NET BENEFIT
-    #taux <- c_mean(ifx$n^2,ifx$ce)
-    #tauy <- c_mean(ify$n^2,ifx$ce)
-    taux <- sum(ifx$n^2 * wx,na.rm=TRUE)
-    tauy <- sum(ify$n^2 * wy,na.rm=TRUE)
-    se <- sqrt(taux/nx + tauy/ny)
-    nnn <- data.frame(Variable=xxx,E=pe$n,SE=se,
-                         LB = pe$n - zz * se,
-                         UB = pe$n + zz * se,
-                      PV = 2 * (1 - pnorm(abs(pe$n/se))),
-                         Metric = "NetT Benefit")
+  ################################
+  ### Set up rest of the outcomes
+  ################################
+  ooo1 <- IF %>% pivot_longer(f:w) %>%
+    mutate(iiff = value*sqrt(weights)) %>%
+    select(ID,name,XY,iiff,Variable)
 
-    ## WIN RATIO
-    #taux <- c_mean(ifx$w^2,ifx$ce)
-    #tauy <- c_mean(ify$w^2,ifx$ce)
-    taux <- sum(ifx$w^2 * wx,na.rm=TRUE)
-    tauy <- sum(ify$w^2 * wy,na.rm=TRUE)
-    se <- sqrt(taux/nx + tauy/ny)
-    www <- data.frame(Variable=xxx,E=exp(pe$w),SE=se,
-                         LB = exp( pe$w - zz * se ),
-                         UB = exp(pe$w + zz * se) ,
-                      PV = 2 * (1 - pnorm(abs(pe$w/se))),
-                         Metric = "Win Ratio")
+  nn1 <- IF %>%
+    group_by(Variable,XY) %>%
+    summarise(n = sum(ce,na.rm=TRUE),.groups = "drop") %>%
+    pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
 
-    ## NNT
-    #taux <- c_mean(ifx$n^2,ifx$ce)
-    #tauy <- c_mean(ify$n^2,ifx$ce)
-    taux <- sum(ifx$n^2 * wx,na.rm=TRUE)
-    tauy <- sum(ify$n^2 * wy,na.rm=TRUE)
-    se <- sqrt(taux/nx + tauy/ny)
-    ttt <- data.frame(Variable=xxx,E=ceiling(1/pe$n),SE=se,
-                         LB = ceiling(1/( pe$n + zz * se ) ),
-                         UB = ceiling(1/(pe$n - zz * se) ),
-                      PV = 2 * (1 - pnorm(abs(pe$n/se))),
-                         Metric = "NNT" )
+  pe1 <- PE %>% pivot_longer(f:w,values_to = "pe")
 
-    rbind(fff,uuu,nnn,www,ttt)
-  })
+  #################
+  ### Put together
+  #################
+  ooo <- rbind(ooo1,ooo0)
 
-  ooo <- do.call("rbind",temp)
+  nn <- rbind(nn1,nn0)
+
+  pe <- rbind(pe1,pe0)
 
 
-  # Prepare weight mapping
-  if (n_vars>1) {
-    ww_vec <- if (is.null(w)) rep(1 / n_vars, n_vars) else w
-    wdat   <- data.frame(Variable = responses, ww = ww_vec)
-    pe <- iii$theta %>% left_join(wdat,by="Variable")
-    ifx <- iii$IF_x %>% left_join(wdat,by="Variable")
-    ify <- iii$IF_y %>% left_join(wdat,by="Variable")
+  ###########################
+  ### Make core calculations
+  ###########################
+  ooo <- ooo  %>%
+    mutate(if2 = iiff^2) %>%
+    group_by(Variable,name,XY) %>%
+    summarise(tau = sum(if2,na.rm=TRUE),.groups = "drop") %>%
+    pivot_wider(names_from = XY,values_from = tau,names_prefix = "tau")
 
-    ifx <- ifx %>% mutate(ww = if_else(is.na(ce),NA,ww))
-    ify <- ify %>% mutate(ww = if_else(is.na(ce),NA,ww))
+  ooo <- ooo %>% left_join(nn,by="Variable") %>% left_join(pe,by=c("Variable","name"))
 
-    pe <- pe %>% pivot_longer(f:w)
-    pe <- pe %>%
-      group_by(name) %>%
-      summarise(value = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      pivot_wider(names_from = name,values_from = value)%>%
-      mutate(Variable = "NPO")
-
-    nx <- ifx %>% group_by(ID) %>% summarise(c = prod(ce,na.rm=TRUE),.groups = "drop" ) %>%
-      summarise(o = sum(c,na.rm=TRUE),.groups = "drop") %>% pull(o)
-    ny <- ify %>% group_by(ID) %>% summarise(c = prod(ce,na.rm=TRUE),.groups = "drop" ) %>%
-      summarise(o = sum(c,na.rm=TRUE),.groups = "drop") %>% pull(o)
-
-    nx <- 1
-    ny <- 1
+  ooo <- ooo %>%
+    mutate(se = sqrt(taux/nx + tauy/ny)) %>%
+    mutate(E=pe,
+           LB = pe - zz * se,
+           UB = pe + zz * se,
+           PV = 2 * (1 - pnorm(abs(pe/se))))
 
 
-        ## FAVORABLE
-    #taux <- c_mean(ifx$f^2,ifx$ce)
-    #tauy <- c_mean(ify$f^2,ifx$ce)
-    taux <- ifx %>%
-      mutate(temp = xweights*f*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    tauy <- ify %>%
-      mutate(temp = yweights*f*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    se <- sqrt(taux/nx + tauy/ny)
-    fff <- data.frame(Variable="NPO",E=pe$f,SE=se,
-                      LB = pe$f - zz * se,
-                      UB = pe$f + zz * se,
-                      PV = 2 * (1 - pnorm(abs(pe$f/se))),
-                      Metric = "Favorable")
+  ######################
+  ### Correct Win Ratio
+  ######################
+  ooo <- ooo %>%
+    mutate(E = if_else(name == "w",exp(E),E),
+           LB = if_else(name == "w",exp(LB),LB),
+           UB = if_else(name == "w",exp(UB),UB))
 
-    ## UNFAVORABLE
-    taux <- ifx %>%
-      mutate(temp = xweights*u*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    tauy <- ify %>%
-      mutate(temp = yweights*u*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    se <- sqrt(taux/nx + tauy/ny)
-    uuu <- data.frame(Variable="NPO",E=pe$u,SE=se,
-                      LB = pe$u - zz * se,
-                      UB = pe$u + zz * se,
-                      PV = 2 * (1 - pnorm(abs(pe$u/se))),
-                      Metric = "Unfavorable")
-
-
-    ## NET BENEFIT
-    taux <- ifx %>%
-      mutate(temp = xweights*n*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    tauy <- ify %>%
-      mutate(temp = yweights*n*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    se <- sqrt(taux/nx + tauy/ny)
-    nnn <- data.frame(Variable="NPO",E=pe$n,SE=se,
-                      LB = pe$n - zz * se,
-                      UB = pe$n + zz * se,
-                      PV = 2 * (1 - pnorm(abs(pe$n/se))),
-                      Metric = "NetT Benefit")
-
-    ## WIN RATIO
-    taux <- ifx %>%
-      mutate(temp = xweights*w*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    tauy <- ify %>%
-      mutate(temp = yweights*w*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    se <- sqrt(taux/nx + tauy/ny)
-    www <- data.frame(Variable="NPO",E=exp(pe$w),SE=se,
-                      LB = exp( pe$w - zz * se ),
-                      UB = exp(pe$w + zz * se) ,
-                      PV = 2 * (1 - pnorm(abs(pe$w/se))),
-                      Metric = "Win Ratio")
-
-    ## NNT
-    taux <- ifx %>%
-      mutate(temp = xweights*n*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    tauy <- ify %>%
-      mutate(temp = yweights*n*ww) %>% group_by(ID) %>%
-      summarise(tt = sum(temp,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      summarise(o = sum(tt^2),.groups = "drop") %>% pull(o)
-    se <- sqrt(taux/nx + tauy/ny)
-    ttt <- data.frame(Variable="NPO",E=ceiling(1/pe$n),SE=se,
-                      LB = ceiling(1/( pe$n + zz * se ) ),
-                      UB = ceiling(1/(pe$n - zz * se) ),
-                      PV = 2 * (1 - pnorm(abs(pe$n/se))),
-                      Metric = "NNT" )
-
-    ooo <- rbind(ooo,rbind(fff,uuu,nnn,www,ttt))
+  ################
+  ### Create GNNT
+  ################
+  dd <- ooo %>%
+    filter(name == "n") %>% mutate(name = "t") %>%
+    mutate(E = ceiling(1/pe),
+           LB = ceiling(1 / ( pe + zz * se ) ),
+           UB = ceiling(1 / ( pe - zz * se) ))
+  ooo <- rbind(ooo,dd)
 
 
 
+  ######################
+  ### Final adjustments
+  ######################
+  responses <- c(responses,"NPO")
 
-    #ifx <- ifx %>%
-    #  group_by(ID,name) %>%
-    #  summarise(value = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop",
-    #            ce = min(ce,na.rm=TRUE)) %>%
-    #  pivot_wider(names_from = name,values_from = value) %>%
-    #  mutate(Variable = "NPO")
+  ooo <- ooo %>%
+    mutate(Metric = case_when(name == "f"~"Favorable",
+                              name == "u"~"Unfavorable",
+                              name == "n"~"Net Treatment Benefit",
+                              name == "w"~"Win Ratio",
+                              name == "t"~"GNNT"))
 
-    #ify <- ify %>% pivot_longer(yweights:w)
-    #ify <- ify %>%
-    #  group_by(ID,name) %>%
-    #  summarise(value = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop",
-    #            ce = min(ce,na.rm=TRUE)) %>%
-    #  pivot_wider(names_from = name,values_from = value)%>%
-    #  mutate(Variable = "NPO")
-
-    #pe <- pe %>% pivot_longer(f:w)
-    #pe <- pe %>%
-    #  group_by(name) %>%
-    #  summarise(value = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-    #  pivot_wider(names_from = name,values_from = value)%>%
-    #  mutate(Variable = "NPO")
-
-
-    #IF_x <- rbind(IF_x,ifx)
-    #IF_y <- rbind(IF_y,ify)
-    #PE <- rbind(PE,pe)
-
-    responses <- c(responses,"NPO")
-  }
-
-
-  ooo <- ooo %>% select(Variable,Metric,Estimate=E,Se = SE,Lower = LB, Upper= UB,PValue = PV)
+  ooo <- ooo %>% select(Variable,Metric,Estimate=E,Se = se,Lower = LB, Upper= UB,PValue = PV)
 
   ooo <- ooo %>% mutate(PValue = if_else(PValue<0.001,"<0.001",as.character(round(PValue,3))))
 
   ooo <- ooo %>%
     mutate(Variable = ordered(Variable,levels = responses)) %>%
-    mutate(Metric = ordered(Metric,levels = c("Favorable","Unfavorable","NetT Benefit","Win Ratio","NNT")))
+    mutate(Metric = ordered(Metric,levels = c("Favorable","Unfavorable","Net Treatment Benefit","Win Ratio","GNNT")))
 
   ooo %>% arrange(Variable,Metric)
+
 
   }
