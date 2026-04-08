@@ -124,8 +124,8 @@ harvest <- function(fit,lambda=0.5){
     } else {
       ooo1 <- c_influence_unfavorable(l$x[orx],l$y[ory],l$x_uni,l$y_uni,l$x_w,l$y_w,lambda[k])
     }
-    IF_x <- data.frame(ID = fit$xid,ce=l$xs,xweights=l$x_weights,f = ooo1$IF_x[order(orx)])
-    IF_y <- data.frame(ID = fit$yid,ce=l$ys,yweights=l$y_weights,f = ooo1$IF_y[order(ory)])
+    IF_x <- data.frame(ID = fit$xid,ce=l$xs,weights=l$x_weights,f = ooo1$IF_x[order(orx)])
+    IF_y <- data.frame(ID = fit$yid,ce=l$ys,weights=l$y_weights,f = ooo1$IF_y[order(ory)])
     theta <- data.frame(f = ooo1$theta)
 
     ## UNFAVORABLE
@@ -172,11 +172,12 @@ harvest <- function(fit,lambda=0.5){
   })
   IF_y <- do.call("rbind",ttt)
 
-
+  var_types <- sapply(fit$Variables, function(v) v$type)
 
   structure(
     list(theta =theta ,IF_x =IF_x ,IF_y =IF_y),
-    class = "harvest"
+    class = "harvest",
+    var_types = var_types
   )
 
 }
