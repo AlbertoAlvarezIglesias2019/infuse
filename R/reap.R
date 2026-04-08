@@ -31,24 +31,24 @@
 #' # ---------------------------------------------------------
 #' data(ipilimumab)
 #' # Higher time is "good" for Progression-Free Survival
-#' fit <- sow(Surv(time, event) ~ arm,
+#' s <- sow(Surv(time, event) ~ arm,
 #'                  data = ipilimumab,
 #'                  treated = "ipilimumab",
 #'                  good = "high")
 #'
-#' harvest(fit,lambda = 6) %>% reap()
+#' harvest(s,lambda = 6) %>% reap()
 #'
 #' # ---------------------------------------------------------
 #' # Example 2: Continuous Data (Obstetrics)
 #' # ---------------------------------------------------------
 #' data(obstetrics)
 #' # High birthweight is generally considered "good"
-#' fit <- sow(Birthweight ~ Group,
+#' s <- sow(Birthweight ~ Group,
 #'                 data = obstetrics,
 #'                 treated = "T",
 #'                 good = "high")
 #'
-#' h <- harvest(fit,lambda = 500) %>% reap()
+#' h <- harvest(s,lambda = 500) %>% reap()
 #' print(h)
 #'
 #' # ---------------------------------------------------------
@@ -57,12 +57,12 @@
 #' data(respiratory)
 #' # We analyze status at the final visit (Visit 4)
 #' resp_v4 <- respiratory[respiratory$visit == 4, ]
-#' sown_resp <- sow(outcome ~ treat,
+#' s <- sow(outcome ~ treat,
 #'                  data = resp_v4,
 #'                  treated = "A",
 #'                  good = "high")
 #'
-#' h <- harvest(fit,lambda = 0.5) %>% reap()
+#' h <- harvest(s,lambda = 0.5) %>% reap()
 #' print(h)
 #'
 #' # ---------------------------------------------------------
@@ -71,12 +71,12 @@
 #' data(epilepsy)
 #' # Looking at seizure rate at Period 4. Lower rate is "good".
 #' epi_v4 <- epilepsy[epilepsy$period == 4, ]
-#' sown_epi <- sow(seizure.rate ~ treatment,
+#' s <- sow(seizure.rate ~ treatment,
 #'                 data = epi_v4,
 #'                 treated = "Progabide",
 #'                 good = "low")
 #'
-#' h <- harvest(fit,lambda = 15) %>% reap()
+#' h <- harvest(s,lambda = 15) %>% reap()
 #' print(h)
 #'
 #' @export
@@ -96,56 +96,62 @@ reap <- function(iii, conf_level = 0.95,w = NULL) {
 
   IF <- rbind(IF_x,IF_y)
 
-  #######################
-  ### Set up NPO outcome
-  #######################
-  ww_vec <- if (is.null(w)) rep(1 / n_vars, n_vars) else w
-  wdat   <- data.frame(Variable = responses, ww = ww_vec)
-
-  ooo0 <- IF %>% left_join(wdat,by="Variable") %>%
-    pivot_longer(f:w) %>%
-    mutate(tt = sqrt(weights) * value *ww) %>%
-    group_by(ID,name,XY) %>%
-    summarise(iiff = sum(tt,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-    mutate(Variable ="NPO")
-
-  nn0 <- IF %>%
-    group_by(ID,XY) %>%
-    summarise(c = prod(ce,na.rm=TRUE),.groups = "drop" ) %>%
-    group_by(XY) %>%
-    summarise(n = sum(c,na.rm=TRUE),.groups = "drop") %>%
-    mutate(Variable ="NPO") %>%
-    pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
-
-  pe0 <- PE %>% left_join(wdat,by="Variable") %>%
-    pivot_longer(f:w) %>%
-    group_by(name) %>%
-    summarise(pe = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-    mutate(Variable = "NPO")
 
 
-  ################################
-  ### Set up rest of the outcomes
-  ################################
-  ooo1 <- IF %>% pivot_longer(f:w) %>%
+  ###################################
+  ### Set up the individual outcomes
+  ###################################
+  ooo <- IF %>% pivot_longer(f:w) %>%
     mutate(iiff = value*sqrt(weights)) %>%
     select(ID,name,XY,iiff,Variable)
 
-  nn1 <- IF %>%
+  nn <- IF %>%
     group_by(Variable,XY) %>%
     summarise(n = sum(ce,na.rm=TRUE),.groups = "drop") %>%
     pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
 
-  pe1 <- PE %>% pivot_longer(f:w,values_to = "pe")
+  pe <- PE %>% pivot_longer(f:w,values_to = "pe")
 
-  #################
-  ### Put together
-  #################
-  ooo <- rbind(ooo1,ooo0)
+  if (n_vars>1) {
+    #######################
+    ### Set up NPO outcome
+    #######################
+    ww_vec <- if (is.null(w)) rep(1 / n_vars, n_vars) else w
+    wdat   <- data.frame(Variable = responses, ww = ww_vec)
 
-  nn <- rbind(nn1,nn0)
+    ooo0 <- IF %>% left_join(wdat,by="Variable") %>%
+      pivot_longer(f:w) %>%
+      mutate(tt = sqrt(weights) * value *ww) %>%
+      group_by(ID,name,XY) %>%
+      summarise(iiff = sum(tt,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
+      mutate(Variable ="NPO")
 
-  pe <- rbind(pe1,pe0)
+    nn0 <- IF %>%
+      group_by(ID,XY) %>%
+      summarise(c = prod(ce,na.rm=TRUE),.groups = "drop" ) %>%
+      group_by(XY) %>%
+      summarise(n = sum(c,na.rm=TRUE),.groups = "drop") %>%
+      mutate(Variable ="NPO") %>%
+      pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
+
+    pe0 <- PE %>% left_join(wdat,by="Variable") %>%
+      pivot_longer(f:w) %>%
+      group_by(name) %>%
+      summarise(pe = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
+      mutate(Variable = "NPO")
+
+    #################
+    ### Put together
+    #################
+    ooo <- rbind(ooo,ooo0)
+
+    nn <- rbind(nn,nn0)
+
+    pe <- rbind(pe,pe0)
+
+    responses <- c(responses,"NPO")
+  }
+
 
 
   ###########################
@@ -190,8 +196,6 @@ reap <- function(iii, conf_level = 0.95,w = NULL) {
   ######################
   ### Final adjustments
   ######################
-  responses <- c(responses,"NPO")
-
   ooo <- ooo %>%
     mutate(Metric = case_when(name == "f"~"Favorable",
                               name == "u"~"Unfavorable",
