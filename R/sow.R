@@ -133,7 +133,7 @@ sow <- function(formu, data, treated = "Treated", good = "high") {
       time_var  <- surv_obj[, 1]
       status_var <- surv_obj[, 2]
     } else {
-      out_type <- class(data[[current_out]])
+      if (length(unique(na.omit(data[[current_out]]))) == 2) {out_type <- "binary"} else {out_type <- class(data[[current_out]])}
       time_var  <- data[[current_out]]
       status_var <- rep(1, length(time_var)) # 1 = observed for continuous
     }
