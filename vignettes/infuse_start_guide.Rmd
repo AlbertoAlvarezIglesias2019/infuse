@@ -7,8 +7,11 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r setup, include = FALSE,echo=FALSE}
 knitr::opts_chunk$set(
+  echo = TRUE,       # Keep showing your code
+  message = FALSE,   # Hides: "Loading required package", "Attaching core tidyverse", etc.
+  warning = FALSE,    # Hides: "Warning in .recacheSubclasses..."
   collapse = TRUE,
   comment = "#>",
   fig.height = 5,
@@ -16,7 +19,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup, echo = FALSE}
+```{r,echo=FALSE}
 library(infuse)
 library(BuyseTest)
 library(kableExtra)
@@ -67,9 +70,9 @@ The reap() function is the final step. It takes the raw output from the harvest(
 
 ## First Example
 
-In this example, we compare a "Score" (like a wellness index) between a Treated and Control group. We want to determine if a random Treated individual has a "Favorable" outcome compared to a random Control individual, defined by a minimum difference of 3 points.
+In this synthetic example, we compare a "Score" (like a wellness index) between a Treated and Control group. To determine if a random Treated individual has a "Favorable" outcome compared to a random Control individual, we use a minimum difference of 3 points.
 
-First, let's create a small dataset of 20 participants.
+First, let's create a small dataset of 60 participants.
 
 ```{r}
 library(infuse)
@@ -258,11 +261,11 @@ While both packages provide the same point estimates, `infuse` utilizes influenc
 
 ## Categorical & Binary Outcomes
 
-A core strength of the `infuse` package is its mathematical consistency: it uses the exact same engine for continuous, survival, and categorical outcomes. This unification allows researchers to compare "Net Benefit" across different types of endpoints using a single framework. 
+A core strength of the `infuse` package is its mathematical consistency: it uses the exact same engine for continuous, survival, and categorical outcomes. This unification allows researchers to compare "Net Benefit" across different types of endpoints using a single framework as we will see in the last section. For now lets look at another example with a binary outcome. 
 
 ### **The `respiratory` dataset**
 
-To illustrate this, we use data from a clinical trial of 111 patients with respiratory illness. Patients were randomized to an Active (A) treatment or Placebo (P). Patients were examined at baseline and at four visits during treatment. We will focus on the respiratory status at Visit 1 (1 = Good, 0 = Poor).
+We use data from a clinical trial of 111 patients with respiratory illness. Patients were randomized to an Active (A) treatment or Placebo (P). Patients were examined at baseline and at four visits during treatment. We will focus on the respiratory status (`outcome` 1 = Good, 0 = Poor) at Visit 1.
 
 
 ```{r}
