@@ -14,8 +14,8 @@ Description: A comprehensive framework for Net Treatment Benefit and Win
     provides tools to 'sow' data by preprocessing survival, continuous, 
     and binary outcomes with support for Generalized Pareto Distribution 
     (GPD) tail extensions. It 'harvests' point estimates and 
-    observation-level influence functions for favorable, unfavorable, net treatment 
-    benefit, and win ratio metrics via a high-performance C++ engine. 
+    observation-level influence functions for favorable and unfavorable metrics
+    via a high-performance C++ engine. 
     Finally, it 'reaps' statistical inference (standard errors, 
     confidence intervals, and p-values) and supports Non-Prioritized 
     Outcome (NPO) synthesis through weighted influence function 
@@ -45,6 +45,7 @@ Suggests:
     knitr,
     plotly,
     rmarkdown,
+    BuyseTest,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
 Config/testthat/edition: 3
