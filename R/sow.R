@@ -169,6 +169,7 @@ sow <- function(formu, data, treated = "Treated", good = "high") {
     if (out_type == "Survival") {
       # Process Treated
       p_x <- param_gpd(x_val, x_stat)
+      idx <- NULL
       if (p_x$extra_n > 0) {
         ecdf_x <- c_extendtail(ecdf_x$uni, ecdf_x$w, p_x$mlesi, p_x$mlesh, p_x$extra_n)
         idx <- which(x_val > max(x_val[x_stat == 1], na.rm = TRUE))
@@ -177,27 +178,71 @@ sow <- function(formu, data, treated = "Treated", good = "high") {
 
       # Process Control
       p_y <- param_gpd(y_val, y_stat)
+      idy <- NULL
       if (p_y$extra_n > 0) {
         ecdf_y <- c_extendtail(ecdf_y$uni, ecdf_y$w, p_y$mlesi, p_y$mlesh, p_y$extra_n)
-        idx <- which(y_val > max(y_val[y_stat == 1], na.rm = TRUE))
-        if (length(idx) > 0) y_val[idx] <- tail(ecdf_y$uni, length(idx))
+        idy <- which(y_val > max(y_val[y_stat == 1], na.rm = TRUE))
+        if (length(idy) > 0) y_val[idy] <- tail(ecdf_y$uni, length(idy))
       }
       tail_params$x <- p_x
       tail_params$y <- p_y
     }
 
     # --- 6. Internal Weight Calculation ---
-    calc_weights <- function(uni, w_vec, raw_vals) {
+    calc_weights <- function(uni, w_vec, raw_vals,is_event) {
+      # 1. Standard calculation of cumulative weights
       ord <- order(raw_vals)
       cum_w <- c_ecdf_values(uni, w_vec, raw_vals[ord])
-      # Calculate differences to get individual point weights
+
+      # 2. Calculate differentials (the "jumps")
+      # At this stage, ties usually have the full jump on the first instance
+      # and 0 on subsequent instances due to the lag.
       w <- cum_w - dplyr::lag(cum_w, default = 0)
-      return(w[order(ord)])
+
+      # 3. Restore original order so we can match weights to raw_vals
+      w_original_order <- w[order(ord)]
+
+      # 4. Clean up is_event (Handle NAs and ensure it's logical)
+      # This prevents the "NAs not allowed in subscripted assignments" error
+      is_event_logical <- as.logical(is_event)
+      is_event_logical[is.na(is_event_logical)] <- FALSE
+
+      # 5. Initialize result vector
+      final_w <- rep(0, length(raw_vals))
+
+      # 6. Redistribute weights ONLY among valid events
+      if(any(is_event_logical)) {
+        # We use ave on the subset, then assign back to the logical mask
+        final_w[is_event_logical] <- ave(w_original_order[is_event_logical],
+                                         raw_vals[is_event_logical],
+                                         FUN = function(x) sum(x) / length(x))
+      }
+
+      return(final_w)
+    }
+
+
+    x_weights <- calc_weights(ecdf_x$uni, ecdf_x$w, x_val,x_stat)
+    y_weights <- calc_weights(ecdf_y$uni, ecdf_y$w, y_val,y_stat)
+
+    ##########################################################
+    ### Recalculates the weights in the extended tail
+    ### at the moment they have 0 weights so I just re-weight
+    ### to make sure that total weight is 1
+    ##########################################################
+    if (out_type == "Survival") {
+      if (!is.null(idx)) {
+        x_weights[idx] <- (1-sum(x_weights,na.rm=TRUE)) / sum(!is.na(x_val[idx]))
+      }
+
+      if (!is.null(idy)) {
+        y_weights[idy] <- (1-sum(y_weights,na.rm=TRUE)) / sum(!is.na(y_val[idy]))
+      }
     }
 
     list(
-      x = x_val, xs = x_stat, x_weights = calc_weights(ecdf_x$uni, ecdf_x$w, x_val),
-      y = y_val, ys = y_stat, y_weights = calc_weights(ecdf_y$uni, ecdf_y$w, y_val),
+      x = x_val, xs = x_stat, x_weights = x_weights,
+      y = y_val, ys = y_stat, y_weights = y_weights,
       x_uni = ecdf_x$uni, x_w = ecdf_x$w,
       y_uni = ecdf_y$uni, y_w = ecdf_y$w,
       tail_params = tail_params,
