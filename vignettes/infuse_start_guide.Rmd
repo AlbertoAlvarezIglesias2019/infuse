@@ -637,7 +637,7 @@ In many trials, a treatment might be "good" for one outcome but "neutral" or eve
 
 Let's combine two outcomes from the obstetrics dataset:
 
-1. `PretermYN`: Whether the birth was preterm (0 = Yes, 1 = No). Here, low is good.
+1. `PretermYN`: Whether the birth was preterm (0 = Yes, 1 = No). Here, `low` is good.
 
 2. Birthweight: The weight of the baby. Here, high is good.
 
@@ -648,18 +648,18 @@ dat <- obstetrics %>% mutate(Preterm01 = if_else(PretermYN=="Yes",1,0)) %>% na.o
 # Step 1: Sow with multiple outcomes
 # Note: good = c("low", "high") because we want fewer preterm births 
 # and higher birth weights.
-s_multi <- sow(Preterm01 + Birthweight ~ Group, 
+s_multi <- infuse::sow(Preterm01 + Birthweight ~ Group, 
                 data = dat, 
                 treated = "T", 
-                good = c("high", "high"))
+                good = c("low", "high"))
 
 # Step 2: Harvest with two lambdas
-h_multi <- harvest(s_multi, lambda = c(0.5, 500))
+h_multi <- infuse::harvest(s_multi, lambda = c(0.5, 500))
 
 # Step 3: Reap with equal weights (50/50)
 r_multi <- infuse::reap(h_multi, w = c(0.5, 0.5))
 
-r_multi %>%  filter(Variable=="NPO") %>% arrange(Metric,Variable) %>% 
+r_multi %>% arrange(Metric,Variable) %>% 
   kbl(caption = "Global Analysis: Preterm Birth & Birthweight") %>% 
   kable_styling(bootstrap_options = "striped")
 ```
@@ -679,7 +679,7 @@ To validate our global assessment, we compare the infuse NPO results with the `B
 
 ```{r}
 BT_npo <- BuyseTest(data = dat, 
-                    formula = Group ~ bin(PretermYN) + cont(Birthweight, threshold = 500),
+                    formula = Group ~ bin(PretermYN,operator = "<0") + cont(Birthweight, threshold = 500,operator = ">0"),
                     #weightEndpoint = c(0.5, 0.5),      # Equal weights
                     hierarchical = FALSE , 
                     trace = 0)
@@ -689,9 +689,46 @@ helper_buyse(BT_npo) %>% kbl() %>% kable_paper("hover")
 ```
 
 
+We can also use the `plot` method for the `reap` object:
+
+```{r}
+plot(r_multi)
+```
+
+And also generate a nice output table using:
+
+```{r,results="asis"}
+tab(r_multi)
+```
+
+
 **Customizing the "Clinical Voice"**
 
 If clinicians believe that preventing a preterm birth is twice as important as the birth weight, you can easily adjust the weights in the reap() function:
+
+
+```{r}
+s_multi <- sow(Preterm01 + Birthweight ~ Group,data = dat,treated = "T",good = c("low", "high"))
+h_multi <- harvest(s_multi, lambda = c(0.5, 500))
+r_multi <- infuse::reap(h_multi, w = c(0.70, 0.30))
+
+r_multi %>% filter(Variable == "NPO") %>% arrange(Metric,Variable) %>% 
+  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") %>% 
+  kable_styling(bootstrap_options = "striped")
+```
+
+
+
+```{r}
+BT_npo <- BuyseTest(data = dat, 
+                    formula = Group ~ bin(PretermYN,operator = "<0",weight=0.7) + cont(Birthweight, threshold = 500,operator = ">0",weight=0.3),
+                    hierarchical = FALSE , 
+                    trace = 0)
+
+# Use the helper to format and compare
+helper_buyse(BT_npo) %>% kbl() %>% kable_paper("hover")
+```
+
 
 
 
