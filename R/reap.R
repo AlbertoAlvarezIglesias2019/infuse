@@ -10,20 +10,22 @@
 #' @param w Numeric vector. Optional weights for calculating the Non-Prioritized
 #'   Outcome (NPO). Defaults to equal weighting.
 #'
-#' @return A tidy data frame summarizing each outcome and the NPO with:
+#' @return A tidy data frame of class \code{c("reap", "data.frame")} summarizing each
+#'   outcome and the NPO with:
 #' \itemize{
 #'   \item \code{Variable}: The outcome name (or "NPO").
-#'   \item \code{Metric}: Favorable, Unfavorable, Net Benefit, Win Ratio, or NNT.
+#'   \item \code{Metric}: Favorable, Unfavorable, Net Benefit, Win Ratio, or GNNT.
 #'   \item \code{Estimate}: The point estimate.
 #'   \item \code{Se}: Standard error derived from Influence Functions.
-#'   \item \code{Lower, Upper}: Wald-based confidence intervals.
-#'   \item \code{PValue}: Two-sided p-value against the null hypothesis.
+#'   \item \code{Lower, Upper}: Wald-based or Wilson-adjusted confidence intervals.
+#'   \item \code{PValue}: Two-sided p-value against the null hypothesis (or NA for proportions).
 #' }
 #'
 #' @details
 #' The inference for the \bold{Win Ratio} is performed on the log-scale and
-#' then back-transformed to ensure the confidence interval is strictly positive.
-#' The \bold{NNT} is calculated as the ceiling of \eqn{1 / Net Benefit}.
+#' then back-transformed. The \bold{GNNT} (Generalized Number Needed to Treat)
+#' is calculated as the ceiling of \eqn{1 / Net Benefit}. For small sample sizes
+#' in Favorable/Unfavorable proportions, a Wilson-adjusted interval is used.
 #'
 #' @examples
 #' # ---------------------------------------------------------
@@ -82,136 +84,145 @@
 #' @export
 reap <- function(iii, conf_level = 0.95,w = NULL) {
 
-  types_map <- attr(iii, "var_types")
+  if (!inherits(iii, "harvest")) stop("Input must be a 'harvest' object.")
 
-  # --- 1. Setup & Metadata ---
-  n_vars <- length(iii$theta$Variable)
-  alp       <- 1 - conf_level
-  zz        <- qnorm(1 - alp / 2)
+  # --- 1. Internal Helper for Inference ---
+  compute_stats <- function(df, zz, var_label) {
+    # Aggregate point estimates
+    poes <- df %>%
+      select(f_pe, u_pe, n_pe, lw_pe) %>%
+      distinct() %>%
+      tidyr::pivot_longer(everything(), names_to = "Metric", values_to = "pe") %>%
+      mutate(Metric = stringr::str_remove(Metric, "_pe"))
+
+    # Aggregate sample sizes
+    sasi <- df %>%
+      group_by(XY) %>%
+      summarise(n = sum(ce, na.rm = TRUE), .groups = "drop") %>%
+      tidyr::pivot_wider(names_from = XY, values_from = n, names_prefix = "n")
+
+    # Aggregate standard errors (Influence Functions)
+    eser <- df %>%
+      select(ID, weights, XY, f_if, u_if, n_if, lw_if) %>%
+      tidyr::pivot_longer(f_if:lw_if, names_to = "Metric", values_to = "infl") %>%
+      mutate(Metric = stringr::str_remove(Metric, "_if")) %>%
+      group_by(Metric, XY) %>%
+      summarise(tau = sum(weights * infl^2, na.rm = TRUE), .groups = "drop") %>%
+      tidyr::pivot_wider(names_from = XY, values_from = tau, names_prefix = "tau")
+
+    # Combine and calculate Wald stats
+    poes %>%
+      inner_join(eser, by = "Metric") %>%
+      bind_cols(sasi) %>%
+      mutate(
+        Variable = var_label,
+        se = sqrt(taux/nx + tauy/ny),
+        E  = pe,
+        LB = pe - zz * se,
+        UB = pe + zz * se,
+        PV = 2 * (1 - pnorm(abs(pe/se)))
+      )
+  }
+
+  # --- 2. Setup Data ---
+  n_vars    <- length(iii$theta$Variable)
+  zz        <- qnorm(1 - (1 - conf_level) / 2)
   responses <- iii$theta$Variable
 
-  IF_x <- iii$IF_x %>% mutate(XY="x")
-  IF_y <- iii$IF_y %>% mutate(XY="y")
-  PE <- iii$theta
+  PE <- iii$theta %>% select(Variable, A = f, B = u)
+  IF <- bind_rows(mutate(iii$IF_x, XY = "x"), mutate(iii$IF_y, XY = "y")) %>%
+    select(Variable, XY, ID:weights, IF_A = f, IF_B = u) %>%
+    left_join(PE, by = "Variable") %>%
+    mutate(weights = round(weights, 16))
 
-  IF <- rbind(IF_x,IF_y)
+  # --- 3. Individual Outcomes ---
+  indiv_df <- IF %>%
+    mutate(
+      f_pe = A, f_if = IF_A,
+      u_pe = B, u_if = IF_B,
+      n_pe = A - B, n_if = IF_A - IF_B,
+      lw_pe = log(A) - log(B), lw_if = IF_A/A - IF_B/B
+    )
 
+  results_list <- lapply(responses, function(v) {
+    compute_stats(filter(indiv_df, Variable == v), zz, v)
+  })
+  ooo <- bind_rows(results_list)
 
-
-  ###################################
-  ### Set up the individual outcomes
-  ###################################
-  ooo <- IF %>% pivot_longer(f:w) %>%
-    mutate(iiff = value*sqrt(weights)) %>%
-    select(ID,name,XY,iiff,Variable)
-
-  nn <- IF %>%
-    group_by(Variable,XY) %>%
-    summarise(n = sum(ce,na.rm=TRUE),.groups = "drop") %>%
-    pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
-
-  pe <- PE %>% pivot_longer(f:w,values_to = "pe")
-
-  if (n_vars>1) {
-    #######################
-    ### Set up NPO outcome
-    #######################
+  # --- 4. Non-Prioritized Outcome (NPO) ---
+  if (n_vars > 1) {
     ww_vec <- if (is.null(w)) rep(1 / n_vars, n_vars) else w
     wdat   <- data.frame(Variable = responses, ww = ww_vec)
 
-    ooo0 <- IF %>% left_join(wdat,by="Variable") %>%
-      pivot_longer(f:w) %>%
-      mutate(tt = sqrt(weights) * value *ww) %>%
-      group_by(ID,name,XY) %>%
-      summarise(iiff = sum(tt,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      mutate(Variable ="NPO")
+    npo_prep <- IF %>%
+      left_join(wdat, by = "Variable") %>%
+      mutate(ww = if_else(is.na(ce), as.numeric(NA), ww))
 
-    nn0 <- IF %>%
-      group_by(ID,XY) %>%
-      summarise(c = prod(ce,na.rm=TRUE),.groups = "drop" ) %>%
-      group_by(XY) %>%
-      summarise(n = sum(c,na.rm=TRUE),.groups = "drop") %>%
-      mutate(Variable ="NPO") %>%
-      pivot_wider(names_from = XY,values_from = n,names_prefix = "n")
+    As <- npo_prep %>% select(Variable, A, ww) %>% distinct() %>% summarise(t = sum(A*ww,na.rm=TRUE)) %>% pull(t)
+    Bs <- npo_prep %>% select(Variable, B, ww) %>% distinct() %>% summarise(t = sum(B*ww,na.rm=TRUE)) %>% pull(t)
 
-    pe0 <- PE %>% left_join(wdat,by="Variable") %>%
-      pivot_longer(f:w) %>%
-      group_by(name) %>%
-      summarise(pe = sum(ww*value,na.rm=TRUE)/sum(ww,na.rm=TRUE),.groups = "drop") %>%
-      mutate(Variable = "NPO")
+    npo_df <- npo_prep %>%
+      group_by(ID, XY) %>%
+      summarise(
+        ce      = prod(ce, na.rm = TRUE), # Logic for NPO sample size
+        weights = first(weights),
+        f_pe = As, f_if = sum(IF_A * ww, na.rm = TRUE) / sum(ww, na.rm = TRUE),
+        u_pe = Bs, u_if = sum(IF_B * ww, na.rm = TRUE) / sum(ww, na.rm = TRUE),
+        n_pe = As - Bs, n_if = sum((IF_A - IF_B) * ww, na.rm = TRUE) / sum(ww, na.rm = TRUE),
+        lw_pe = log(As) - log(Bs),
+        lw_if = sum((IF_A*Bs/(As*Bs) - IF_B*As/(As*Bs)) * ww, na.rm = TRUE) / sum(ww, na.rm = TRUE),
+        .groups = "drop"
+      )
 
-    #################
-    ### Put together
-    #################
-    ooo <- rbind(ooo,ooo0)
-
-    nn <- rbind(nn,nn0)
-
-    pe <- rbind(pe,pe0)
-
-    responses <- c(responses,"NPO")
+    ooo <- bind_rows(ooo, compute_stats(npo_df, zz, "NPO"))
+    responses <- c(responses, "NPO")
   }
 
-
-
-  ###########################
-  ### Make core calculations
-  ###########################
-  ooo <- ooo  %>%
-    mutate(if2 = iiff^2) %>%
-    group_by(Variable,name,XY) %>%
-    summarise(tau = sum(if2,na.rm=TRUE),.groups = "drop") %>%
-    pivot_wider(names_from = XY,values_from = tau,names_prefix = "tau")
-
-  ooo <- ooo %>% left_join(nn,by="Variable") %>% left_join(pe,by=c("Variable","name"))
-
+  # --- 5. Post-Processing & Transformations ---
   ooo <- ooo %>%
-    mutate(se = sqrt(taux/nx + tauy/ny)) %>%
-    mutate(E=pe,
-           LB = pe - zz * se,
-           UB = pe + zz * se,
-           PV = 2 * (1 - pnorm(abs(pe/se))))
+    # Back-transform Win Ratio
+    mutate(
+      across(c(E, LB, UB), ~ if_else(Metric == "lw", exp(.x), .x))
+    ) %>%
+    # GNNT Logic
+    bind_rows(
+      filter(., Metric == "n") %>%
+        mutate(
+          Metric = "t",
+          E  = ceiling(1/pe),
+          LB = ceiling(1 / (pe + zz * se)),
+          UB = ceiling(1 / (pe - zz * se))
+        )
+    )
 
-
-  ######################
-  ### Correct Win Ratio
-  ######################
+  # Wilson Adjustment for small proportions
   ooo <- ooo %>%
-    mutate(E = if_else(name == "w",exp(E),E),
-           LB = if_else(name == "w",exp(LB),LB),
-           UB = if_else(name == "w",exp(UB),UB))
+    mutate(
+      wher_prop = Metric %in% c("f", "u"),
+      wher_small = (nx * pe < 10) | (nx * (1 - pe) < 10),
+      use_wilson = wher_prop & wher_small,
+      LB = if_else(use_wilson, (1/(1+zz^2/nx)) * (pe + zz^2/(2*nx) - zz * sqrt(se^2 + zz^2/(4*nx^2))), LB),
+      UB = if_else(use_wilson, (1/(1+zz^2/nx)) * (pe + zz^2/(2*nx) + zz * sqrt(se^2 + zz^2/(4*nx^2))), UB),
+      PV = if_else(wher_prop, as.numeric(NA), PV)
+    )
 
-  ################
-  ### Create GNNT
-  ################
-  dd <- ooo %>%
-    filter(name == "n") %>% mutate(name = "t") %>%
-    mutate(E = ceiling(1/pe),
-           LB = ceiling(1 / ( pe + zz * se ) ),
-           UB = ceiling(1 / ( pe - zz * se) ))
-  ooo <- rbind(ooo,dd)
+  # --- 6. Final Formatting ---
+  final_df <- ooo %>%
+    mutate(
+      Metric = case_when(
+        Metric == "f"  ~ "Favorable",
+        Metric == "u"  ~ "Unfavorable",
+        Metric == "n"  ~ "Net Treatment Benefit",
+        Metric == "lw" ~ "Win Ratio",
+        Metric == "t"  ~ "GNNT"
+      ),
+      PValue = if_else(PV < 0.001, "<0.001", as.character(round(PV, 3))),
+      Variable = ordered(Variable, levels = responses),
+      Metric   = ordered(Metric, levels = c("Favorable", "Unfavorable", "Net Treatment Benefit", "Win Ratio", "GNNT"))
+    ) %>%
+    select(Variable, Metric, Estimate = E, Se = se, Lower = LB, Upper = UB, PValue) %>%
+    arrange(Variable, Metric)
 
-
-
-  ######################
-  ### Final adjustments
-  ######################
-  ooo <- ooo %>%
-    mutate(Metric = case_when(name == "f"~"Favorable",
-                              name == "u"~"Unfavorable",
-                              name == "n"~"Net Treatment Benefit",
-                              name == "w"~"Win Ratio",
-                              name == "t"~"GNNT"))
-
-  ooo <- ooo %>% select(Variable,Metric,Estimate=E,Se = se,Lower = LB, Upper= UB,PValue = PV)
-
-  ooo <- ooo %>% mutate(PValue = if_else(PValue<0.001,"<0.001",as.character(round(PValue,3))))
-
-  ooo <- ooo %>%
-    mutate(Variable = ordered(Variable,levels = responses)) %>%
-    mutate(Metric = ordered(Metric,levels = c("Favorable","Unfavorable","Net Treatment Benefit","Win Ratio","GNNT")))
-
-  ooo %>% arrange(Variable,Metric)
-
+  structure(final_df, class = c("reap", "data.frame"))
 
   }
