@@ -91,7 +91,7 @@ The sow() function initializes the analysis. It identifies the treatment arm and
 
 ```{r}
 # We specify that a "high" score is clinically better
-s <- infuse::sow(Score ~ Group, data = dat, treated = "Treated", good = "high")
+s <- sow(Score ~ Group, data = dat, treated = "Treated", good = "high")
 ```
 
 - The formula object `Score ~ Group` supports multiple outcomes on the LHS and exactly **one binary grouping variable on the RHS**.
@@ -141,7 +141,7 @@ In this example the probability of a **favorable (f)** pair is 0.64 while the pr
 The `plot()` method helps identify observations that are potentially **influential** in the estimation:
 
 ```{r}
-plot(h,metric="ntb",type = "influence")
+plot(h)
 ```
 
 *Note: The diamonds represent the mean values of the influence functions, which are expected to be 0 for a correctly specified estimator*.
@@ -167,6 +167,13 @@ Both the NTB and the WR ratio are statistically significant (p<0.05).
 - *WR (4.7)*: A random treated-control pair is 4.7 times more likely to have a favorable pair than an unfavorable one. 
 
 - *GNNT (2)*: We expect to observe one extra favorable pair for every 2 random treated-control pairs.
+
+A tidy version of the `reap` object can be obtained as follows:
+
+```{r}
+tab(r)
+```
+
 
 All in all, this analysis demonstrates that the treatment results in a significant and clinically meaningful benefit for the participants.
 
@@ -241,6 +248,10 @@ r %>%
   kable_styling(bootstrap_options = "striped")
 ```
 
+```{r}
+tab(r)
+```
+
 ### Benchmarking: `infuse` vs. `BuyseTest`
 
 To validate the `infuse` engine, we compare our point estimates with the established `BuyseTest` package.
@@ -298,6 +309,14 @@ r %>%
   kbl(caption = "Net Benefit Analysis (Threshold = 0.5)") %>% 
   kable_styling(bootstrap_options = "striped")
 ```
+
+\
+
+```{r}
+tab(r)
+```
+
+\
 
 **NTB as ARR**
 
@@ -365,6 +384,13 @@ r %>%
   kable_styling(bootstrap_options = "striped")
 ```
 
+\
+
+```{r}
+tab(r)
+```
+
+\
 ### Benchmarking with `BuyseTest`
 
 To ensure accuracy, we compare these ordinal results with the `BuyseTest` package using the "continuous" type (which handles ordinal levels) and a threshold of 1.
@@ -442,6 +468,12 @@ reap(h_epi) %>%
   kable_styling(bootstrap_options = "condensed")
 ```
 
+\
+```{r}
+reap(h_epi) %>% tab()
+```
+
+\
 ### Interpretation 
 
 Unlike a standard Poisson regression or T-test on counts, the infuse output gives us a direct "patient-centered" probability:
@@ -508,6 +540,13 @@ r_raw %>%
   kbl(caption = "Follow-up Seizure Rate Analysis (Threshold = 5, Lower is Better)") %>% 
   kable_styling(bootstrap_options = "striped")
 ```
+
+\
+```{r}
+tab(r_raw)
+```
+
+\
 
 **Interpretation and Comparison**
 
@@ -593,6 +632,12 @@ results_surv %>%
   kable_styling(bootstrap_options = "striped")
 ```
 
+\
+```{r}
+tab(results_surv)
+```
+
+\
 **Benchmarking with BuyseTest**
 
 We validate the `infuse` results against the `BuyseTest` package using the type = "timetoevent" endpoint. You will notice that the results are almost identical, confirming that the influence function approach for survival data is both accurate and robust.
@@ -645,16 +690,16 @@ dat <- obstetrics %>% mutate(Preterm01 = if_else(PretermYN=="Yes",1,0)) %>% na.o
 # Step 1: Sow with multiple outcomes
 # Note: good = c("low", "high") because we want fewer preterm births 
 # and higher birth weights.
-s_multi <- infuse::sow(Preterm01 + Birthweight ~ Group, 
+s_multi <- sow(Preterm01 + Birthweight ~ Group, 
                 data = dat, 
                 treated = "T", 
                 good = c("low", "high"))
 
 # Step 2: Harvest with two lambdas
-h_multi <- infuse::harvest(s_multi, lambda = c(0.5, 500))
+h_multi <- harvest(s_multi, lambda = c(0.5, 500))
 
 # Step 3: Reap with equal weights (50/50)
-r_multi <- infuse::reap(h_multi, w = c(0.5, 0.5))
+r_multi <- reap(h_multi, w = c(0.5, 0.5))
 
 r_multi %>% arrange(Metric,Variable) %>% 
   kbl(caption = "Global Analysis: Preterm Birth & Birthweight") %>% 
@@ -707,14 +752,19 @@ If clinicians believe that preventing a preterm birth is twice as important as t
 ```{r}
 s_multi <- sow(Preterm01 + Birthweight ~ Group,data = dat,treated = "T",good = c("low", "high"))
 h_multi <- harvest(s_multi, lambda = c(0.5, 500))
-r_multi <- infuse::reap(h_multi, w = c(0.70, 0.30))
+r_multi <- reap(h_multi, w = c(0.70, 0.30))
 
 r_multi %>% filter(Variable == "NPO") %>% arrange(Metric,Variable) %>% 
   kbl(caption = "Global Analysis: Preterm Birth & Birthweight") %>% 
   kable_styling(bootstrap_options = "striped")
 ```
 
+\
+```{r}
+tab(r_multi)
+```
 
+\
 
 ```{r}
 BT_npo <- BuyseTest(data = dat, 
