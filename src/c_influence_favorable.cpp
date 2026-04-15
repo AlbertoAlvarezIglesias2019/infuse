@@ -8,7 +8,7 @@ NumericVector c_ecdf_values_less(NumericVector uni,NumericVector w, NumericVecto
 //' Calculate Win Probability Point Estimate and Influence Functions
 //'
 //' This function computes the point estimate for the probability of a favorable
-//' pair (Win Probability, P(X >= Y + lambda)) and returns the influence functions
+//' pair (Win Probability, \code{P(X >= Y + lambda)}) and returns the influence functions
 //' for both the treatment (X) and control (Y) groups. These influence functions
 //' can be used for variance estimation and combining multiple outcomes.
 //'
@@ -21,14 +21,14 @@ NumericVector c_ecdf_values_less(NumericVector uni,NumericVector w, NumericVecto
 //' @param lambda double: The clinically meaningful threshold for defining a win.
 //'
 //' @return List: A list containing:
-//'    \item{theta}{Point Estimate: P(X >= Y + lambda)}
+//'    \item{theta}{Point Estimate: \code{P(X >= Y + lambda)}}
 //'    \item{IF_x}{Influence Function values for the treatment group}
 //'    \item{IF_y}{Influence Function values for the control group}
 //'
 //' @details
 //' The win probability theta is calculated by integrating the ECDF of Y against
 //' the empirical distribution of X. The influence functions are calculated as:
-//' IF_x = F_Y(x - lambda) - theta and IF_y = [1 - F_X_less(y + lambda)] - theta.
+//' \code{IF_x = F_Y(x - lambda) - theta} and \code{IF_y = [1 - F_X_less(y + lambda)] - theta}.
 //'
 //' @export
 // [[Rcpp::export]]
@@ -44,7 +44,7 @@ List c_influence_favorable(NumericVector x, NumericVector y,
    // Evaluate ECDF of Y at each (x_i - lambda)
    //NumericVector fy_xi_minus = c_ecdf_values(y_uni, y_w, x, lambda);
    NumericVector fx_yj_plus_less = c_ecdf_values_less(x_uni, x_w, y, -lambda);
-   
+
    // Calculate weights for each x_i to perform the integration
    //NumericVector weights_x = c_ecdf_values(x_uni, x_w, x);
    NumericVector weights_y = c_ecdf_values(y_uni, y_w, y);
@@ -58,7 +58,7 @@ List c_influence_favorable(NumericVector x, NumericVector y,
      }
    }
 
-   
+
    // --- PART 2: Influence Function for X ---
    // IF_x(x_i) = F_Y(x_i - lambda) - theta
    NumericVector fy_xi_minus = c_ecdf_values(y_uni, y_w, x, lambda);
