@@ -14,6 +14,7 @@ The package is designed around a three-stage lifecycle: sow(), harvest(), and re
 For a full tutorial with real-world examples (Continuous, Binary, and Survival data), see the **Quick Start Guide**:
 
 ```r
+library(infuse)
 vignette("infuse_start_guide", package = "infuse")
 ```
 or just
@@ -21,3 +22,4 @@ or just
 ```r
 browseVignettes("infuse")
 ```
+and click the HTML tag.
