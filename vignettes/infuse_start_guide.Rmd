@@ -17,9 +17,6 @@ knitr::opts_chunk$set(
   fig.height = 5,
   fig.width = 5
 )
-```
-
-```{r,echo=FALSE}
 library(infuse)
 library(BuyseTest)
 library(kableExtra)
@@ -61,7 +58,7 @@ The `sow()` function is your initialization tool. It prepares the environment, p
 
 **harvest(): The Gathering Phase**
 
-Once the seeds are sown, harvest() does the heavy lifting. It executes the core logic of the package. In essence it calculates the point estimates and the patient-level values of the influence functions. This function passes weighted ECDF data to the C++ inference engine to calculate point estimates and influence functions for Favorable and Unfavorable pairs, Net Treatment Benefit, Win Ratios and the Generalised Number Needed to Treat.
+Once the seeds are sown, harvest() does the heavy lifting. It executes the core logic of the package. In essence it calculates the point estimates and the patient-level values of the influence functions. This function passes weighted ECDF data to the C++ inference engine to calculate point estimates and influence functions for Favorable and Unfavorable pairs.
 
 **reap(): Extracting the Essence**
 
@@ -94,7 +91,7 @@ The sow() function initializes the analysis. It identifies the treatment arm and
 
 ```{r}
 # We specify that a "high" score is clinically better
-s <- sow(Score ~ Group, data = dat, treated = "Treated", good = "high")
+s <- infuse::sow(Score ~ Group, data = dat, treated = "Treated", good = "high")
 ```
 
 - The formula object `Score ~ Group` supports multiple outcomes on the LHS and exactly **one binary grouping variable on the RHS**.
