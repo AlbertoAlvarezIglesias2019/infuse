@@ -5,7 +5,7 @@ The goal of `infuse` is to provide fast, mathematically consistent inference fra
 ## Installation
 ```r
 # install.packages("devtools")
-devtools::install_github("yourusername/infuse")
+devtools::install_github("AlbertoAlvarezIglesias2019/infuse")
 ```
 
 ## Documentation
@@ -15,4 +15,9 @@ For a full tutorial with real-world examples (Continuous, Binary, and Survival d
 
 ```r
 vignette("infuse_start_guide", package = "infuse")
+```
+or just
+
+```r
+browseVignettes("infuse")
 ```
