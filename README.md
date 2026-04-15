@@ -6,3 +6,13 @@ The goal of `infuse` is to provide fast, mathematically consistent inference fra
 ```r
 # install.packages("devtools")
 devtools::install_github("yourusername/infuse")
+```
+
+## Documentation
+The package is designed around a three-stage lifecycle: sow(), harvest(), and reap().
+
+For a full tutorial with real-world examples (Continuous, Binary, and Survival data), see the **Quick Start Guide**:
+
+```r
+vignette("infuse_start_guide", package = "infuse")
+```
