@@ -180,6 +180,7 @@ All in all, this analysis demonstrates that the treatment results in a significa
 We compare the results with those obtained using Generalised Pairwise Comparisons:
 
 ```{r}
+library(BuyseTest)
 helper_buyse <- function(BT) {
   o1 <- confint(BT,statistic = "favorable") %>% mutate(Metric="Favorable")
   o2 <- confint(BT,statistic = "unfavorable") %>% mutate(Metric="Unfavorable")
