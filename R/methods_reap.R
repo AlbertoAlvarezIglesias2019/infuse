@@ -117,14 +117,17 @@ tab.reap <- function(x, ...) {
 
   # Ensure NPO is at the very bottom
   vars <- as.character(df_final$Variable)
-  non_npo <- vars[vars != "NPO"]
-  df_final <- df_final[match(c(non_npo, "NPO"), df_final$Variable), ]
+  if (length(vars)>1) {
+    non_npo <- vars[vars != "NPO"]
+    df_final <- df_final[match(c(non_npo, "NPO"), df_final$Variable), ]
+  }
+
 
   # Rename columns for internal kable display (these are the sub-headers)
   colnames(df_final) <- c("Outcome", rep(c("Estimate", "95% CI", "P-value"), 3))
 
   # 4. Create the kableExtra table
-  df_final %>%
+  kef <- df_final %>%
     kableExtra::kbl(booktabs = TRUE, align = "rccccccccc", escape = FALSE) %>%
     kableExtra::kable_styling(
       bootstrap_options = c("striped", "hover", "condensed"),
@@ -141,19 +144,26 @@ tab.reap <- function(x, ...) {
     # Vertical Lines (after Outcome, after NTB block, after WR block)
     kableExtra::column_spec(1, border_right = TRUE, bold = TRUE) %>%
     kableExtra::column_spec(4, border_right = TRUE) %>%
-    kableExtra::column_spec(7, border_right = TRUE) %>%
-    # Special styling for the NPO row (last row)
-    kableExtra::row_spec(
-      nrow(df_final),
-      bold = TRUE,
-      background = "#F9F9F9",
-      color = "#D55E00"
-    )%>%
-    # ADDING THE FOOTNOTE HERE
-    kableExtra::footnote(
-      general = "NPO = Non-prioritised Outcome summary.",
-      general_title = "Note: ",
-      footnote_as_chunk = TRUE    )
+    kableExtra::column_spec(7, border_right = TRUE)
+
+  if (length(vars)>1) {
+    kef <- kef   %>%
+      # Special styling for the NPO row (last row)
+      kableExtra::row_spec(
+        nrow(df_final),
+        bold = TRUE,
+        background = "#F9F9F9",
+        color = "#D55E00"
+      )%>%
+      # ADDING THE FOOTNOTE HERE
+      kableExtra::footnote(
+        general = "NPO = Non-prioritised Outcome summary.",
+        general_title = "Note: ",
+        footnote_as_chunk = TRUE    )
+  }
+
+  kef
+
 }
 
 
