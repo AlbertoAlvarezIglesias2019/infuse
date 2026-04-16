@@ -1,96 +1,86 @@
 #' Prepare Data for Win/Loss Probability Calculations
 #'
 #' @description
-#' A preprocessing utility that "sows" the analysis by parsing outcomes
-#' (continuous or survival), partitioning data into treatment/control groups,
-#' and pre-calculating Empirical Cumulative Distribution Functions (ECDF).
-#' It produces a structured S3 object optimized for the \code{harvest} function.
+#' A preprocessing utility that "sows" the analysis by parsing outcomes,
+#' partitioning data into treatment/control groups, and pre-calculating
+#' Empirical Cumulative Distribution Functions (ECDF). It produces a
+#' structured S3 object optimized for the \code{harvest} function.
 #'
-#' @param formu A formula object (e.g., \code{Surv(time, status) + score ~ treatment}).
-#'   Supports multiple outcomes on the LHS and exactly one binary grouping variable on the RHS.
+#' @param formu A formula object (e.g., \code{Score(5, "high") ~ Group}).
+#'   Outcomes on the LHS can be wrapped in function-like calls to specify
+#'   clinical thresholds (\code{lambda}) and direction (\code{good}).
+#'   Supports multiple outcomes (joined by \code{+}) on the LHS and exactly
+#'   one binary grouping variable on the RHS.
 #' @param data A data frame containing the variables specified in \code{formu}.
 #' @param treated A string specifying the level of the grouping variable to be
 #'   treated as the "Treated" (Group X) arm. Defaults to \code{"Treated"}.
-#' @param good A character vector (\code{"high"} or \code{"low"}) indicating
-#'   clinical favorability. Values are recycled if shorter than the number of outcomes.
 #'
 #' @return An S3 object of class \code{"sow"}. A nested list containing:
 #' \itemize{
 #'   \item \code{xid, yid}: Participant IDs for Treated (X) and Control (Y) groups.
-#'   \item \code{Variables}: A named list for each outcome containing pre-calculated
-#'   ECDFs, weights, and GPD tail parameters if applicable.
+#'   \item \code{Variables}: A named list for each outcome containing:
+#'     \itemize{
+#'       \item \code{x, y}: Raw outcome values for Treated and Control.
+#'       \item \code{xs, ys}: Status indicators (1 = observed, 0 = censored). Defaults to all 1 if outcome is not time-to-event.
+#'       \item \code{x_weights, y_weights}: Probability weights assigned to each observation (usually 1/n unless it is a time-to-event outcome in which case the weights are based on Kaplan-Meier).
+#'       \item \code{x_uni, y_uni}: Unique observed values used for the ECDF.
+#'       \item \code{x_w, y_w}: The jump sizes (weights) associated with the unique values.
+#'       \item \code{tail_params}: Parameters for the GPD tail extension (for survival data).
+#'       \item \code{good}: The direction of superiority ("high" or "low").
+#'       \item \code{lambda}: The threshold defining the margin of clinical importance.
+#'       \item \code{comment}: Internal metadata regarding default settings applied.
+#'       \item \code{name}: The name of the outcome variable.
+#'       \item \code{type}: The detected data type (e.g., "binary", "numeric", "survival").
+#'     }
 #' }
 #'
 #' @details
-#' \bold{Data Partitioning:} The function assigns internal IDs (\code{p_i_d})
-#' to maintain the joint distribution (correlation) between multiple outcomes
-#' for the same individual during later resampling or influence function steps.
+#' \bold{Outcome Specification:} The function supports four main types:
+#' \code{numeric}, \code{binary}, \code{ordered factor}, and \code{survival}.
 #'
-#' \bold{Survival Tail Extension:} If a survival curve does not reach zero
-#' (censoring at the end), a Generalized Pareto Distribution (GPD) is used
-#' to extend the tail via \code{param_gpd} and \code{c_extendtail}.
+#' \bold{In-Formula Arguments:} Thresholds and directions are defined directly
+#' in the formula:
+#' \itemize{
+#'   \item \code{Binary}: Must specify the "superior" level, e.g., \code{Cured("Yes")}.
+#'         Sets \code{lambda = 0.5} internally.
+#'   \item \code{Ordered}: Must specify direction, e.g., \code{Stage("low")}.
+#'         Sets \code{lambda = 1} internally.
+#'   \item \code{Numeric}: Requires \code{lambda} and optionally \code{good}
+#'         (defaults to \code{"high"}). E.g., \code{Weight(500, "high")}.
+#'   \item \code{Survival}: Uses \code{Surv(time, status)(lambda, direction)}.
+#' }
+#'
+#' \bold{Data Partitioning:} The function assigns internal IDs (\code{p_i_d})
+#' within each arm. This ensures that when multiple outcomes are analyzed,
+#' the joint distribution (correlation) between outcomes for the same individual
+#' is preserved.
+#'
+#' \bold{Tail Extension:} For survival data, the function automatically
+#' calculates Generalized Pareto Distribution (GPD) parameters to handle
+#' right-censored tails.
 #'
 #' @examples
 #' # ---------------------------------------------------------
-#' # Example 1: Survival Data (Ipilimumab)
-#' # ---------------------------------------------------------
-#' data(ipilimumab)
-#' # Higher time is "good" for Progression-Free Survival
-#' sown_surv <- sow(Surv(time, event) ~ arm,
-#'                  data = ipilimumab,
-#'                  treated = "ipilimumab",
-#'                  good = "high")
-#'
-#' print(sown_surv)
-#' summary(sown_surv)
-#' plot(sown_surv)
-#'
-#' # ---------------------------------------------------------
-#' # Example 2: Continuous Data (Obstetrics)
+#' # Example 1: Continuous Data with Thresholds in Formula
 #' # ---------------------------------------------------------
 #' data(obstetrics)
-#' # High birthweight is generally considered "good"
-#' sown_obs <- sow(Birthweight ~ Group,
-#'                 data = obstetrics,
-#'                 treated = "T",
-#'                 good = "high")
-#'
-#' summary(sown_obs)
-#' plot(sown_obs)
+#' # Treated patients "win" if birthweight is 500g higher
+#' sown_obs <- sow(Birthweight(500, high) ~ Group,
+#'                  data = obstetrics,
+#'                  treated = "T")
 #'
 #' # ---------------------------------------------------------
-#' # Example 3: Longitudinal Binary Data (Respiratory)
+#' # Example 2: Multiple Outcomes (Binary & Continuous)
 #' # ---------------------------------------------------------
-#' data(respiratory)
-#' # We analyze status at the final visit (Visit 4)
-#' resp_v4 <- respiratory[respiratory$visit == 4, ]
-#' sown_resp <- sow(outcome ~ treat,
-#'                  data = resp_v4,
-#'                  treated = "A",
-#'                  good = "high")
+#' # For Preterm01, "0" is superior. For Birthweight, 500g margin is used.
+#' sown_multi <- sow(Preterm01(0) + Birthweight(500) ~ Group,
+#'                    data = obstetrics,
+#'                    treated = "T")
 #'
-#' summary(sown_resp)
-#' # Note: For binary outcomes, the plot shows a single-step ECDF
-#' plot(sown_resp)
-#'
-#' # ---------------------------------------------------------
-#' # Example 4: Multiple Outcomes (Epilepsy)
-#' # ---------------------------------------------------------
-#' data(epilepsy)
-#' # Looking at seizure rate at Period 4. Lower rate is "good".
-#' epi_v4 <- epilepsy[epilepsy$period == 4, ]
-#' sown_epi <- sow(seizure.rate ~ treatment,
-#'                 data = epi_v4,
-#'                 treated = "Progabide",
-#'                 good = "low")
-#'
-#' print(sown_epi)
-#' summary(sown_epi)
-#'
-#' @importFrom stringr str_split str_trim str_detect str_remove_all
 #' @importFrom survival Surv
+#' @importFrom dplyr if_else lag
 #' @export
-sow <- function(formu, data, treated = "Treated", good = "high") {
+sow <- function(formu, data, treated = "Treated") {
 
   data <- as.data.frame(data)
 
@@ -111,32 +101,175 @@ sow <- function(formu, data, treated = "Treated", good = "high") {
   x_id <- data$p_i_d[is_treated]
   y_id <- data$p_i_d[!is_treated]
 
+  # --- 2. Separates formula components ---
+  lhs <- formu[[2]]
+  rhs <- formu[[3]]
+  get_calls <- function(x) {
+    if (is.call(x) && x[[1]] == quote(`+`)) {
+      return(c(get_calls(x[[2]]), get_calls(x[[3]])))
+    }
+    return(list(x))
+  }
+  calls <- get_calls(lhs)
+  n_outcomes <- length(calls)
+
   # --- 2. Identify Outcomes (LHS) ---
-  lhs_string <- deparse(formu[[2]])
-  outcomes_raw <- stringr::str_trim(unlist(stringr::str_split(lhs_string, "\\+")))
-  n_outcomes <- length(outcomes_raw)
+  #lhs_string <- deparse(formu[[2]])
+  #outcomes_raw <- stringr::str_trim(unlist(stringr::str_split(lhs_string, "\\+")))
+  #n_outcomes <- length(outcomes_raw)
 
   # Recycle 'good' argument if user provided fewer values than outcomes
-  good_vec <- rep(good, length.out = n_outcomes)
+  #good_vec <- rep(good, length.out = n_outcomes)
+  findgoodlambda <- function(ccc) {
+    lccc <- length(ccc) - 1
+    if (lccc==0) return(data.frame(lambda=NA,good="high"))
+    if (lccc==1 & class(ccc[[2]])=="numeric") return(data.frame(lambda=ccc[[2]],good=NA))
+    if (lccc==1 & class(ccc[[2]]) %in% c("name","character") ) return(data.frame(lambda=NA,good=as.character(ccc[[2]])))
+    if (lccc==2 & class(ccc[[2]])=="numeric") return(data.frame(lambda=ccc[[2]],good=as.character(ccc[[3]])))
+    if (lccc==2 & class(ccc[[2]]) %in% c("name","character")) return(data.frame(lambda=ccc[[3]],good=as.character(ccc[[2]])))
+    return(NULL)
+  }
 
   # --- 3. Process Each Outcome ---
-  processed_vars <- lapply(seq_along(outcomes_raw), function(k) {
+  #processed_vars <- lapply(seq_along(outcomes_raw), function(k) {
+  processed_vars <- lapply(1:n_outcomes, function(k) {
 
-    current_out <- outcomes_raw[k]
-    is_surv <- stringr::str_detect(current_out, "Surv")
+    if (class(calls[[k]])=="name") {
+      calls[[k]] <- as.call(list(calls[[k]]))
+    }
+    current_call <- calls[[k]]
+
+    is_surv <- "Surv" %in% as.character(current_call[[1]]) & length(as.character(current_call[[1]])) >1
 
     # Extract raw vectors and status
     if (is_surv) {
-      out_type <- "Survival"
-      tmp_f <- as.formula(paste(current_out, "~ 1"))
-      surv_obj <- model.frame(tmp_f, data = data)[[1]]
-      time_var  <- surv_obj[, 1]
-      status_var <- surv_obj[, 2]
+      out_type <- "survival"
+      time_var <- data[[ as.character(current_call[[1]][[2]]) ]]
+      status_var <- data[[ as.character(current_call[[1]][[3]]) ]]
+      current_out <- as.character(current_call[[1]][[2]])
     } else {
-      if (length(unique(na.omit(data[[current_out]]))) == 2) {out_type <- "binary"} else {out_type <- class(data[[current_out]])}
-      time_var  <- data[[current_out]]
+      current_out <- as.character(current_call[[1]])
+      if (length(unique(na.omit(data[[ as.character(current_call[[1]]) ]] ) )) == 2) {
+        out_type <- "binary"} else {
+          out_type <- class(data[[ as.character(current_call[[1]]) ]])[1] }
+      time_var  <- data[[ as.character(current_call[[1]]) ]]
       status_var <- rep(1, length(time_var)) # 1 = observed for continuous
     }
+
+
+    #######################
+    ## Check variable type
+    #######################
+    ###### Throw an error if the variable is not one of the correct types
+    if (!out_type %in% c("survival", "binary", "ordered","numeric","integer")) {
+      stop(
+        paste("Variable '",
+              current_out,
+              "' must be one of 'survival', 'binary', 'ordered', 'numeric', or 'integer'. You provided an outcome of type: '",
+              out_type,"'",sep=""),
+        call. = FALSE
+      )
+    }
+
+    ##################################
+    ### Check if there are no options
+    ##################################
+    ###### Throw an error if there are no options for binary outcomes
+    if (out_type == "binary" & length(current_call) == 1) {
+      stop(
+        paste("Please specify which value of '",
+              current_out,
+              "' is superior; '",
+              current_out,"(",unique(time_var)[1],")' or '",
+              current_out,"(",unique(time_var)[2],")'",sep=""),
+        call. = FALSE
+      )
+    }
+
+    ###### Throw an error if there are no options for ordered outcomes
+    if (out_type == "ordered" & length(current_call) == 1) {
+      stop(
+        paste("Please specify the direction of superior outcomes; '",
+              current_out,"(high)' or '",
+              current_out,"(low)'",sep=""),
+        call. = FALSE
+      )
+    }
+
+    ###### Throw an error if there are no options for any other outcome
+    if (length(current_call) == 1) {
+      stop(
+        paste("Please specify the lambda, and the direction of superior outcomes; Examples: '",
+              current_out,"(10,high)', '",
+              current_out,"(20,low)', ",
+              current_out,"(100,high)', etc..'",sep=""),
+        call. = FALSE
+      )
+    }
+
+    #######################################
+    ### Check if there is only one option
+    #######################################
+    ###### Throw an error if there is one option for binary outcomes but is not one of the levels
+    if (out_type == "binary" & length(current_call) == 2 & !(as.character(current_call[[2]]) %in% unique(time_var)) ) {
+      stop(
+        paste("The level you have selected is not one of the levels of '",current_out,
+              "'\n Please specify which value of '",
+              current_out,
+              "' is superior; '",
+              current_out,"(",unique(time_var)[1],")' or '",
+              current_out,"(",unique(time_var)[2],")'",sep=""),
+        call. = FALSE
+      )
+    }
+
+    ###### Throw an error if there is one option for ordered outcomes but is not high or low
+    if (out_type == "ordered" & length(current_call) == 2 & !(as.character(current_call[[2]]) %in% c("high","low")) ) {
+      stop(
+        paste("You need to specify the direction of superior outcomes; '",
+              current_out,"(high)' or '",
+              current_out,"(low)'",sep=""),
+        call. = FALSE
+      )
+    }
+
+    ###### Throw an error if there is one option for any other outcome and is numeric
+    if ( !(out_type %in% c("ordered","binary")) & length(current_call) == 2 & !is.numeric(current_call[[2]]) ) {
+      stop(
+        paste("You need to specify the lambda for '",
+              current_out,"; Example: '",
+              current_out,"(20,",current_call[[2]],")' for lambda = 20",sep=""),
+        call. = FALSE
+      )
+    }
+
+    vardef <- findgoodlambda(current_call)
+    vardef$comment <- NULL
+    if (out_type == "binary" & length(current_call) == 2 & is.numeric(current_call[[2]])) {
+      vardef$lambda <- 0.5
+      vardef$good <- current_call[[2]]
+    }
+
+
+
+    if (out_type == "binary") {
+      vardef$lambda <- 0.5
+      vardef$comment <- paste(" (default); '",current_out," = ",vardef$good,"' is superior.",sep="")
+      time_var <- as.character(time_var)
+      time_var <- if_else(time_var==vardef$good,1,0)
+      vardef$good <- "high"
+    }
+
+    if (out_type == "ordered") {
+      vardef$lambda <- 1
+      vardef$comment <- paste(" (default).",sep="")
+    }
+
+    if (!(out_type %in% c("ordered","binary")) & is.na(vardef$good)) {
+      vardef$good <- "high"
+      vardef$comment <- paste(". Direction = high chosen by default.",sep="")
+    }
+
 
     # Split into X (Treated) and Y (Control)
     x_val <- time_var[is_treated]
@@ -148,10 +281,17 @@ sow <- function(formu, data, treated = "Treated", good = "high") {
     y_stat[is.na(y_val)]<-NA
 
     # Handle Character/Factor inputs by converting to numeric
-    if (is.character(x_val) || is.factor(x_val)) {
-      x_val <- as.numeric(as.factor(x_val)) - 1
-      y_val <- as.numeric(as.factor(y_val)) - 1
-    }
+    #if (is.character(x_val) || is.factor(x_val)) {
+    #  x_val <- as.numeric(as.factor(x_val)) - 1
+    #  y_val <- as.numeric(as.factor(y_val)) - 1
+    #}
+    #if (out_type == "binary") {
+    #  if (is.character(x_val) || is.factor(x_val)) {
+    #    x_val <- if_else(x_val==vardef$good,1,0)
+    #    y_val <- if_else(y_val==vardef$good,1,0)
+    #    vardef$good <- "high"}
+    #}
+
 
     # --- 4. Calculate ECDFs ---
     if (out_type == "Survival") {
@@ -246,16 +386,22 @@ sow <- function(formu, data, treated = "Treated", good = "high") {
       x_uni = ecdf_x$uni, x_w = ecdf_x$w,
       y_uni = ecdf_y$uni, y_w = ecdf_y$w,
       tail_params = tail_params,
-      good = good_vec[k],
+      #good = good_vec[k],
+      good = vardef$good,
+      lambda = vardef$lambda,
+      comment = vardef$comment,
+      name = current_out,
       type = out_type
     )
   })
 
   # --- 7. Finalize Names and Object ---
   # Cleans Surv(Time, Status) into just "Time" for list names
-  clean_names <- stringr::str_remove_all(outcomes_raw, "Surv\\(|\\)|\\s") |>
-    stringr::str_split(",") |>
-    sapply(`[[`, 1)
+  #clean_names <- stringr::str_remove_all(outcomes_raw, "Surv\\(|\\)|\\s") |>
+  #  stringr::str_split(",") |>
+  #  sapply(`[[`, 1)
+  clean_names <- sapply(processed_vars,function(x) x$name)
+
   names(processed_vars) <- clean_names
 
   structure(
