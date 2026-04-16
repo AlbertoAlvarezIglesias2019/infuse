@@ -55,10 +55,19 @@ print.sow <- function(x, ...) {
   cat("\n--- infuse: Sown Data Object ---\n")
   cat(sprintf("Outcomes processed: %d (%s)\n",
               n_vars, paste(names(x$Variables), collapse = ", ")))
-  cat(sprintf("Sample Size: %d Treated (X), %d Control (Y)\n",
-              length(x$xid), length(x$yid)))
-  cat("--------------------------------\n")
-  cat("Next step: harvest(fit)\n")
+  cat(sprintf("Total Sample Size: %d Treated (X), %d Control (Y)\n Overall N = %d\n",
+              length(x$xid), length(x$yid) ,length(x$xid) + length(x$yid) ))
+  cat("------------------------------------------------------------------------------------------------\n")
+  #cat("Next step: harvest(fit)\n")
+
+  temp <- lapply(x$Variables,function(xx){
+    #data.frame(Variable=xx$name,Type = xx$type,Direction = xx$good,Lambda = xx$lambda)
+    cat(sprintf("\033[1m%s\033[22m (%s); \033[4m%s\033[24m values superior; Lambda = %g",
+                xx$name, xx$type,xx$good,xx$lambda))
+    cat(xx$comment,"\n")
+  })
+  cat("------------------------------------------------------------------------------------------------\n")
+
   invisible(x)
 }
 
@@ -70,7 +79,7 @@ print.sow <- function(x, ...) {
 #' @export
 summary.sow <- function(object, ...) {
   cat("\nStatistical Summary of Sown Data\n")
-  cat(rep("=", 40), "\n", sep = "")
+  cat(rep("=", 70), "\n", sep = "")
 
   # Create a summary table for each variable
   summary_list <- lapply(names(object$Variables), function(v_name) {
@@ -96,5 +105,5 @@ summary.sow <- function(object, ...) {
     cat("\nNote: Survival tail extension (GPD) was applied to one or more variables.\n")
   }
 
-  cat(rep("=", 40), "\n", sep = "")
+  cat(rep("=", 70), "\n", sep = "")
 }
