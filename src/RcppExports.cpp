@@ -10,54 +10,41 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// c_ecdf
-List c_ecdf(NumericVector x);
-RcppExport SEXP _infuse_c_ecdf(SEXP xSEXP) {
+// c_ecdf_plus
+List c_ecdf_plus(NumericVector x, Nullable<IntegerVector> xs);
+RcppExport SEXP _infuse_c_ecdf_plus(SEXP xSEXP, SEXP xsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_ecdf(x));
+    Rcpp::traits::input_parameter< Nullable<IntegerVector> >::type xs(xsSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_ecdf_plus(x, xs));
     return rcpp_result_gen;
 END_RCPP
 }
-// c_ecdf_surv
-List c_ecdf_surv(NumericVector ttt, IntegerVector sss);
-RcppExport SEXP _infuse_c_ecdf_surv(SEXP tttSEXP, SEXP sssSEXP) {
+// c_ecdf_predict
+NumericVector c_ecdf_predict(NumericVector z, NumericVector x_sorted, NumericVector p_sorted);
+RcppExport SEXP _infuse_c_ecdf_predict(SEXP zSEXP, SEXP x_sortedSEXP, SEXP p_sortedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type ttt(tttSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type sss(sssSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_ecdf_surv(ttt, sss));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_ecdf_values
-NumericVector c_ecdf_values(NumericVector uni, NumericVector w, NumericVector z, double ofset);
-RcppExport SEXP _infuse_c_ecdf_values(SEXP uniSEXP, SEXP wSEXP, SEXP zSEXP, SEXP ofsetSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type uni(uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type w(wSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type z(zSEXP);
-    Rcpp::traits::input_parameter< double >::type ofset(ofsetSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_ecdf_values(uni, w, z, ofset));
+    Rcpp::traits::input_parameter< NumericVector >::type x_sorted(x_sortedSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type p_sorted(p_sortedSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_ecdf_predict(z, x_sorted, p_sorted));
     return rcpp_result_gen;
 END_RCPP
 }
-// c_ecdf_values_less
-NumericVector c_ecdf_values_less(NumericVector uni, NumericVector w, NumericVector z, double ofset);
-RcppExport SEXP _infuse_c_ecdf_values_less(SEXP uniSEXP, SEXP wSEXP, SEXP zSEXP, SEXP ofsetSEXP) {
+// c_ecdf_predict_less
+NumericVector c_ecdf_predict_less(NumericVector z, NumericVector x_sorted, NumericVector p_sorted);
+RcppExport SEXP _infuse_c_ecdf_predict_less(SEXP zSEXP, SEXP x_sortedSEXP, SEXP p_sortedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type uni(uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type w(wSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type z(zSEXP);
-    Rcpp::traits::input_parameter< double >::type ofset(ofsetSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_ecdf_values_less(uni, w, z, ofset));
+    Rcpp::traits::input_parameter< NumericVector >::type x_sorted(x_sortedSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type p_sorted(p_sortedSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_ecdf_predict_less(z, x_sorted, p_sorted));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -76,123 +63,12 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// c_findInterval
-IntegerVector c_findInterval(NumericVector x, NumericVector breaks);
-RcppExport SEXP _infuse_c_findInterval(SEXP xSEXP, SEXP breaksSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type breaks(breaksSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_findInterval(x, breaks));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_influence_favorable
-List c_influence_favorable(NumericVector x, NumericVector y, NumericVector x_uni, NumericVector y_uni, NumericVector x_w, NumericVector y_w, double lambda);
-RcppExport SEXP _infuse_c_influence_favorable(SEXP xSEXP, SEXP ySEXP, SEXP x_uniSEXP, SEXP y_uniSEXP, SEXP x_wSEXP, SEXP y_wSEXP, SEXP lambdaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_uni(x_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_uni(y_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_w(x_wSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_w(y_wSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_influence_favorable(x, y, x_uni, y_uni, x_w, y_w, lambda));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_influence_netbenefit
-List c_influence_netbenefit(NumericVector x, NumericVector y, NumericVector x_uni, NumericVector y_uni, NumericVector x_w, NumericVector y_w, double lambda);
-RcppExport SEXP _infuse_c_influence_netbenefit(SEXP xSEXP, SEXP ySEXP, SEXP x_uniSEXP, SEXP y_uniSEXP, SEXP x_wSEXP, SEXP y_wSEXP, SEXP lambdaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_uni(x_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_uni(y_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_w(x_wSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_w(y_wSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_influence_netbenefit(x, y, x_uni, y_uni, x_w, y_w, lambda));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_influence_unfavorable
-List c_influence_unfavorable(NumericVector x, NumericVector y, NumericVector x_uni, NumericVector y_uni, NumericVector x_w, NumericVector y_w, double lambda);
-RcppExport SEXP _infuse_c_influence_unfavorable(SEXP xSEXP, SEXP ySEXP, SEXP x_uniSEXP, SEXP y_uniSEXP, SEXP x_wSEXP, SEXP y_wSEXP, SEXP lambdaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_uni(x_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_uni(y_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_w(x_wSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_w(y_wSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_influence_unfavorable(x, y, x_uni, y_uni, x_w, y_w, lambda));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_influence_winratio
-List c_influence_winratio(NumericVector x, NumericVector y, NumericVector x_uni, NumericVector y_uni, NumericVector x_w, NumericVector y_w, double lambda);
-RcppExport SEXP _infuse_c_influence_winratio(SEXP xSEXP, SEXP ySEXP, SEXP x_uniSEXP, SEXP y_uniSEXP, SEXP x_wSEXP, SEXP y_wSEXP, SEXP lambdaSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_uni(x_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_uni(y_uniSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x_w(x_wSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type y_w(y_wSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_influence_winratio(x, y, x_uni, y_uni, x_w, y_w, lambda));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_mean
-double c_mean(NumericVector x, IntegerVector xs);
-RcppExport SEXP _infuse_c_mean(SEXP xSEXP, SEXP xsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type xs(xsSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_mean(x, xs));
-    return rcpp_result_gen;
-END_RCPP
-}
-// c_order
-IntegerVector c_order(NumericVector x);
-RcppExport SEXP _infuse_c_order(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_order(x));
-    return rcpp_result_gen;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_infuse_c_ecdf", (DL_FUNC) &_infuse_c_ecdf, 1},
-    {"_infuse_c_ecdf_surv", (DL_FUNC) &_infuse_c_ecdf_surv, 2},
-    {"_infuse_c_ecdf_values", (DL_FUNC) &_infuse_c_ecdf_values, 4},
-    {"_infuse_c_ecdf_values_less", (DL_FUNC) &_infuse_c_ecdf_values_less, 4},
+    {"_infuse_c_ecdf_plus", (DL_FUNC) &_infuse_c_ecdf_plus, 2},
+    {"_infuse_c_ecdf_predict", (DL_FUNC) &_infuse_c_ecdf_predict, 3},
+    {"_infuse_c_ecdf_predict_less", (DL_FUNC) &_infuse_c_ecdf_predict_less, 3},
     {"_infuse_c_extendtail", (DL_FUNC) &_infuse_c_extendtail, 5},
-    {"_infuse_c_findInterval", (DL_FUNC) &_infuse_c_findInterval, 2},
-    {"_infuse_c_influence_favorable", (DL_FUNC) &_infuse_c_influence_favorable, 7},
-    {"_infuse_c_influence_netbenefit", (DL_FUNC) &_infuse_c_influence_netbenefit, 7},
-    {"_infuse_c_influence_unfavorable", (DL_FUNC) &_infuse_c_influence_unfavorable, 7},
-    {"_infuse_c_influence_winratio", (DL_FUNC) &_infuse_c_influence_winratio, 7},
-    {"_infuse_c_mean", (DL_FUNC) &_infuse_c_mean, 2},
-    {"_infuse_c_order", (DL_FUNC) &_infuse_c_order, 1},
     {NULL, NULL, 0}
 };
 
