@@ -17,7 +17,7 @@ You can install the development version of infuse from GitHub.
 install.packages("pak")
 
 # Use this instead of install_github
-pak::pak("AlbertoAlvarezIglesias2019/infuse", build_vignettes = TRUE)
+pak::pak("AlbertoAlvarezIglesias2019/infuse")
 ```
 
 ## Documentation
