@@ -18,7 +18,7 @@ devtools::install_github("AlbertoAlvarezIglesias2019/infuse", build_vignettes = 
 ```
 
 ## Documentation
-The package is designed around a three-stage lifecycle: sow(), harvest(), and reap().
+The package is designed around a two-stage workflow: infuse() and realise().
 
 For a detailed tutorial covering real-world examples (Continuous, Binary, and Survival data), please refer to the **Quick Start Guide**:
 
