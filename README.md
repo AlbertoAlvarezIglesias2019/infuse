@@ -13,8 +13,13 @@ You can install the development version of infuse from GitHub.
 **Note**: Building the vignettes may take a few minutes as it executes the coding examples.
 
 ```r
-# install.packages("devtools")
-devtools::install_github("AlbertoAlvarezIglesias2019/infuse", build_vignettes = TRUE)
+# 1. Install remotes if you haven't yet
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+
+# 2. Force the install with vignette building
+remotes::install_github("AlbertoAlvarezIglesias2019/infuse", 
+                         build_vignettes = TRUE, 
+                         force = TRUE)
 ```
 
 ## Documentation
