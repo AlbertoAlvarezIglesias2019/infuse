@@ -13,9 +13,8 @@
 #'
 #' @section Core Workflow:
 #' \enumerate{
-#'   \item \code{\link{sow}}: Initialize data and pre-calculate distributions.
-#'   \item \code{\link{harvest}}: Calculate point estimates and influence functions.
-#'   \item \code{\link{reap}}: Extract statistical inference (CI, p-values, NPO).
+#'   \item \code{\link{infuse}}: Initialize data and pre-calculate distributions.
+#'   \item \code{\link{realise}}: Extract statistical inference (CI, p-values, NPO).
 #' }
 #'
 #' @keywords internal
@@ -23,7 +22,6 @@
 
 ## usethis namespace: start
 #' @importFrom Rcpp sourceCpp
-#' @importFrom magrittr %>%
 #' @useDynLib infuse, .registration = TRUE
 ## usethis namespace: end
 NULL
