@@ -2,7 +2,7 @@
 title: "infuse: A Quick Start Guide"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{infuse_start_guide}
+  %\VignetteIndexEntry{infuse: A Quick Start Guide}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -15,189 +15,175 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.height = 5,
-  fig.width = 5
+  fig.width = 7
 )
 library(infuse)
 library(BuyseTest)
 library(kableExtra)
-library(tidyverse)
+library(data.table)
 ```
 
 
 ## Introduction
 
-Suppose we have a Randomized Clinical Trial (RCT) with two groups (T= Treated and C= Controls). We use $X$ to refer to the outcome in the Treated group and $Y$ to the outcome in the Control group. Without loss of generality, we assume higher values indicate a better outcome.
-
-The experiment consists of selecting a random pair $(X,Y)$. These pairs are classified based on a clinically relevant difference, $\lambda$:
+Suppose we have a Randomized Clinical Trial (RCT) with two groups (T= Treated and C= Controls). We use $X$ to refer to the outcome in the Treated group and $Y$ to the outcome in the Control group. Assuming higher values indicate superior clinical outcomes, we classify a random pair $(X,Y)$ based on a margin of clinical importance, $\lambda$:
 
 * **Favorable**: if $X-Y\ge\lambda$
 * **Neutral**: if $|X-Y|<\lambda$
 * **Unfavorable**: if $X-Y\le\lambda$
 
-The objective is to estimate the **Net Treatment Benefit (NTB)**:
+The goal of the `infuse` package is to estimate the **Net Treatment Benefit (NTB)** and the **Win Ratio (WR)**
 
 $$NB = P(X\ge Y+\lambda)-P(Y\ge X+\lambda) =P(\text{Favorable}) - P(\text{Unfavorable})$$
 
-### Estimation via Empirical Survival Functions
 
-To estimate $P(X\ge Y+\lambda)$ and $P(Y\ge X+\lambda)$, we use a plug-in estimator. Rather than comparing every possible pair (which is computationally expensive), we leverage the **Empirical Survival Functions** $S_X^{n\ge}(x)$ and $S_Y^{m\ge}(y)$:
+$$WR = \frac{P(X\ge Y+\lambda)}{P(Y\ge X+\lambda)} = \frac{P(\text{Favorable})}{P(\text{Unfavorable})} $$
+
+
+### Efficient Estimation via Empirical Survival Functions
+
+Rather than using computationally expensive pairwise comparisons, `infuse` uses **Empirical Survival Functions** $S_X^{n\ge}(x)$ and $S_Y^{m\ge}(y)$ to calculate the $P(X\ge Y+\lambda)$ and $P(Y\ge X+\lambda)$ and consequently:
 
 $$NB =  \frac{1}{m} \sum_{j=1}^m S_X^{n\ge}(y_j + \lambda) - \frac{1}{n} \sum_{i=1}^n S_Y^{m\ge}(x_i + \lambda)$$
 
-This approach is mathematically equivalent to Generalized Pairwise Comparisons (GPC) but significantly faster because it reduces the problem to a sequence of lookups on a step function.
+$$WR =  \frac{\frac{1}{m} \sum_{j=1}^m S_X^{n\ge}(y_j + \lambda) }{\frac{1}{n} \sum_{i=1}^n S_Y^{m\ge}(x_i + \lambda)}$$
+
+This approach is mathematically equivalent to Generalized Pairwise Comparisons (GPC) but significantly faster for large sample sizes.
 
 
 
-## Package Structure: The Life of an Infusion
+## Package Structure: The Infusion Lifecycle
 
-The `infuse` package operates on a simple, three-stage lifecycle. 
- 
-**sow(): Setting the Foundation**
+The `infuse` package utilises a two-stage workflow:
 
-The `sow()` function is your initialization tool. It prepares the environment, partitioning data into treatment/control groups, and pre-calculating Empirical Cumulative Distribution Functions (ECDF). It produces a structured S3 object optimized for the harvest function.
+1. `infuse()`: The foundation. It partitions data, standardizes arms, and pre-calculates the distributions (ECDF/Kaplan-Meier). It returns a structured S3 object.
 
-**harvest(): The Gathering Phase**
-
-Once the seeds are sown, harvest() does the heavy lifting. It executes the core logic of the package. In essence it calculates the point estimates and the patient-level values of the influence functions. This function passes weighted ECDF data to the C++ inference engine to calculate point estimates and influence functions for Favorable and Unfavorable pairs.
-
-**reap(): Extracting the Essence**
-
-The reap() function is the final step. It takes the raw output from the harvest() phase and "strains" it into a clean, usable format (like a tidy data frame or a summary list). It calculates point estimates, standard errors, confidence intervals, and p-values for NTB and WR statistics using Influence Functions. It supports both individual outcome analysis and a weighted Non-Prioritized Outcome (NPO) summary.
+2. `realise()`: The engine. It calculates point estimates, influence-function-based standard errors, confidence intervals, and p-values for both individual and weighted Non-Prioritized Outcomes (NPO).
 
 
-## First Example
+## First Example: Synthetic Score Analysis
 
-In this synthetic example, we compare a "Score" (like a wellness index) between a Treated and Control group. To determine if a random Treated individual has a "Favorable" outcome compared to a random Control individual, we use a minimum difference of 3 points.
-
-First, let's create a small dataset of 60 participants.
+We compare a "Wellness Score" between two groups of 60 participants, where a difference of at least 3 points is clinically meaningful.
 
 ```{r}
 library(infuse)
-library(tidyverse)
+library(data.table)
 library(kableExtra)
 
 set.seed(42)
-dat <- data.frame(
-  Group = c(rep("Treated", 30), rep("Controls", 30)),
+dat <- data.table(
+  Group = rep(c("Treated", "Controls"), each = 30),
   Score = c(rnorm(30, 105, 5), rnorm(30, 100, 5))
 )
 
-dat %>% slice_sample(n=10) %>% kbl() %>% kable_paper()
+dat[sample(.N, 10)] |>  kbl() |>  kable_styling(full_width = FALSE)|>  kable_paper()
 ```
 
-**Step 1 sow(): The preparation**
 
-The sow() function initializes the analysis. It identifies the treatment arm and pre-calculates the distribution of the data.
+**Step 1: `infuse()`**
+
+The `infuse()` function initializes the analysis. It identifies the treatment arm and pre-calculates the distribution of the data.
 
 ```{r}
 # We specify that a "high" score is clinically better
-s <- sow(Score ~ Group, data = dat, treated = "Treated", good = "high")
+s <- infuse(Score(3,high) ~ Group, data = dat, treated = "Treated")
 ```
 
-- The formula object `Score ~ Group` supports multiple outcomes on the LHS and exactly **one binary grouping variable on the RHS**.
+- The formula object contains outcomes on the LHS that can be wrapped in function-like calls to specify clinical thresholds ($\lambda$) and direction (`high` or `low`). It supports multiple outcomes (joined by `+`) on the LHS and exactly one binary grouping variable on the RHS. In this example there is one outcome, `Score`, with a threshold defining the margin of clinical importance $\lambda = 3$, and `high` direction (meaning that high values represent superior outcomes). 
 
-- The `treated` argument is a string specifying the level of the grouping variable to be treated as the "Treated" (Group X) arm. Defaults to "Treated".
+- The `treated` argument is a string specifying the level of the grouping variable to be treated as the "Treated" (Group X) arm. 
 
-- Finally, the `good` argument is a character vector ("high" or "low") indicating clinical favorability. If `good = "high"` high values of the outcome represent better clinical response.
+the object `s` is a structured S3 object of class `infuse`, a list containing three stacked `data.table`s:
 
-the object `s` is a structured S3 object of class `sow`, a nested list containing:
+* `data`: Patient-level data combined across all outcomes.
 
-* `xid`, `yid`: Participant IDs for Treated (X) and Control (Y) groups.
+* `metadata`: Variable-level configurations and overall probabilities.
 
-* `Variables`: A named list for each outcome containing pre-calculated ECDFs, weights, and GPD tail parameters if applicable.
+* `tail`: Generalized Pareto Distribution (GPD) tail extension parameters.
 
-We can plot the cumulative distribution functions of the Treated (X) and the Controls (Y) using the `plot` method:
+We can visualise the cumulative distribution functions of the Treated (X) and the Controls (Y) using the `plot` method:
 
 ```{r}
 plot(s)
 ```
 
-The summary method:
+It is important to use the print method to revise that the function has correctly recognised the right inputs:
+
+```{r}
+print(s)
+```
+
+In this case we have one variable *Score* that is numeric with high values representing better outcomes and a threshold $\lambda = 3$. 
+
+The summary method provides a high-level overview of the favorable/unfavorable probabilities::
 
 ```{r}
 summary(s)
 ```
 
-gives high level summaries. In this case we have one variable *Score* that is numeric with high values representing better outcomes and a mean of the treated of 105 vs a mean of the controls of 99 indicating an effect in favour of the Treated.
-
-**Step 2: harvest() (The Calculation)**
-
-Now we calculate the probability that a random Treated-Control pair is Favorable. We define `lambda = 3`, meaning a treated patient only "wins" against a control patient if their score is at least 3 points higher.
-
-```{r}
-# The harvest function runs the influence-function engine
-h <- harvest(s, lambda = 3)
-summary(h)
-```
-
-\
-
-In this example the probability of a **favorable (f)** pair is 0.64 while the probability of an **unfavorable (u)** pair is 0.14.
+The mean score of the treated is 105 vs a mean score of the controls of 99 indicating an effect in favour of the Treated. The output also shows the probability that a random Treated-Control pair is Favorable and Unfavorable. In this example the probability of a **favorable** pair is 0.64 while the probability of an **unfavorable** pair is 0.14.
 
 * The **Net Treatment Benefit (n)** is the difference 0.64 - 0.14 = 0.50.
 
-* The **Win Ratio (w)** is the ratio: 0.64/0.14=4.6 (which is 1.55 on the log-scale).
+* The **Win Ratio (w)** is the ratio: 0.64/0.14=4.6.
 
-The `plot()` method helps identify observations that are potentially **influential** in the estimation:
+The `plotinf()` method helps identifying observations that are potentially **influential** in the estimation. We use the `vari = "f"` argument for *Favorable* summaries and `vari = "f"` for *Unfavorable* summaries:
 
 ```{r}
-plot(h)
+plotinf(s,vari = "f")
 ```
 
 *Note: The diamonds represent the mean values of the influence functions, which are expected to be 0 for a correctly specified estimator*.
 
-**Step 3: reap() (The Results)**
+**Step 2: `realise()`**
 
-Finally, we "reap" the statistical inference. This converts the raw influence values into a tidy table with point estimates, confidence intervals, and p-values.
+We now "realise" the inference to get the formal statistical results. This converts the raw influence values into a tidy table with point estimates, confidence intervals, and p-values.
 
 
 ```{r}
-r <- reap(h)
-r %>% 
-  kbl(caption = "Net Benefit Analysis (Threshold = 3)") %>% 
-  kable_styling(bootstrap_options = "striped")
+h <- realise(s)
+h |> kbl(caption = "Net Benefit Analysis (Threshold = 3)") |> kable_styling(bootstrap_options = "striped")
 ```
 
-Both the NTB and the WR ratio are statistically significant (p<0.05).
+Both the Net Treatment Benefit NTB and the Win Ratio WR are statistically significant (p<0.05).
 
 **Interpretation**:
 
 - *NTB (0.50)*: in a set of 100 random treated-control pairs, we expect a net surplus of 50 favorable pairs over unfavorable pairs (concretely you expect 64 favorable pairs and 14 unfavorable pairs)
 
-- *WR (4.7)*: A random treated-control pair is 4.7 times more likely to have a favorable pair than an unfavorable one. 
+- *WR (4.7)*: A random treated-control pair is 4.7 times more likely to be favorable than to be unfavorable. 
 
 - *GNNT (2)*: We expect to observe one extra favorable pair for every 2 random treated-control pairs.
 
-A tidy version of the `reap` object can be obtained as follows:
+A tidy version of the `realise` object can be obtained as follows:
 
 ```{r}
-tab(r)
+tab(h)
 ```
 
 
-All in all, this analysis demonstrates that the treatment results in a significant and clinically meaningful benefit for the participants.
-
-We compare the results with those obtained using Generalised Pairwise Comparisons:
+We compare these results with those obtained using Generalised Pairwise Comparisons:
 
 ```{r}
 library(BuyseTest)
+library(data.table)
 helper_buyse <- function(BT) {
-  o1 <- confint(BT,statistic = "favorable") %>% mutate(Metric="Favorable")
-  o2 <- confint(BT,statistic = "unfavorable") %>% mutate(Metric="Unfavorable")
-  o3 <- confint(BT) %>% mutate(Metric="NetT Benefit")
-  o4 <- confint(BT,statistic = "winRatio") %>% mutate(Metric="Win Ratio")
+  o1 <- as.data.table(confint(BT, statistic = "favorable"))[, Metric := "Favorable"]
+  o2 <- as.data.table(confint(BT, statistic = "unfavorable"))[, Metric := "Unfavorable"]
+  o3 <- as.data.table(confint(BT))[, Metric := "NetT Benefit"]
+  o4 <- as.data.table(confint(BT, statistic = "winRatio"))[, Metric := "Win Ratio"]
   o <- rbind(o1[dim(o1)[1],],o2[dim(o2)[1],],o3[dim(o3)[1],],o4[dim(o4)[1],])
   row.names(o) <- NULL
-  o <- o %>% select(Metric,Estimate = estimate,Lower = lower.ci,Upper = upper.ci)
+  setDT(o)
+  o <- o[, .( Metric,Estimate = estimate,SE = se,Lower = lower.ci,Upper = upper.ci, Pvalue = p.value)]
   o
 }
 BT <-  BuyseTest(data = dat,endpoint = "Score",type = "cont",treatment = "Group",threshold = 3,trace=0)
 
-helper_buyse(BT) %>%kbl() %>% kable_paper("hover", full_width = FALSE)
+helper_buyse(BT) |> kbl() |>  kable_paper("hover", full_width = FALSE)
 ```
 
-We are ready now to see a few real life examples.
-
+As one can see, the point estimates and standard errors are identical
 
 ## Real-World Example: The Obstetrics Dataset (Continuous)
 
@@ -218,39 +204,32 @@ data(obstetrics)
 dat <- obstetrics
 
 # Display sample data
-kbl(head(dat)) %>%
-  kable_paper(bootstrap_options = "striped", full_width = FALSE)
+kbl(head(dat)) |>  kable_paper(bootstrap_options = "striped", full_width = FALSE)
 ```
 
-### Distributions and Sowing
-
-We define a clinically relevant difference of λ=500 grams. Any pair where the treated mother’s baby is at least 500g heavier than the control is considered "Favorable."
-
-The plot of the Empirical CDFs allows us to see the "gap" between the two groups across the entire weight spectrum (which in this case is very small):
+We define a clinically relevant difference of λ=500 grams. Any pair where the treated mother’s baby is at least 500g heavier than the control is considered "Favorable". 
 
 ```{r}
-s <- sow(Birthweight~Group,data=dat,treated = "T")
+s <- infuse(Birthweight(500)~Group,data=dat,treated = "T")
+print(s)
+```
+
+Note that by default the function chooses `high` values as being associated with superior outcomes. The plot of the Empirical CDFs allows us to see the "gap" between the two groups across the entire weight spectrum (which in this case is very small):
+
+```{r}
 plot(s)
 ```
 
-```{r}
-summary(s)
-```
+Finally we get the estimates and the confidence intervals:
 
-### Harvesting and reaping the NTB, WR and GNNT
-
-Using our $\lambda = 500$ threshold, we estimate the relevant probabilities:
 
 ```{r}
-h <- harvest(s,500)
-r <- reap(h)
-r %>% 
-  kbl(caption = "Net Benefit Analysis (Threshold = 500)") %>% 
-  kable_styling(bootstrap_options = "striped")
+h <- realise(s)
+h |>  kbl(caption = "Net Benefit Analysis (Threshold = 500)") |>  kable_styling(bootstrap_options = "striped")
 ```
 
 ```{r}
-tab(r)
+tab(h)
 ```
 
 ### Benchmarking: `infuse` vs. `BuyseTest`
@@ -260,17 +239,17 @@ To validate the `infuse` engine, we compare our point estimates with the establi
 Initially, a direct comparison might show slight differences if the dataset contains missing values (NA). `BuyseTest` and `infuse` handle missingness differently by default. However, when we ensure a clean dataset, the results match perfectly:
 
 ```{r}
-BT <-  BuyseTest(data = dat %>% na.omit(),endpoint = "Birthweight",type = "cont",treatment = "Group",threshold = 500,trace=0)
-helper_buyse(BT) %>%kbl() %>% kable_paper("hover", full_width = FALSE)
+BT <-  BuyseTest(data = dat |> na.omit(),endpoint = "Birthweight",type = "cont",treatment = "Group",threshold = 500,trace=0)
+helper_buyse(BT) |>kbl() |> kable_paper("hover", full_width = FALSE)
 ```
 
 ### Why use `infuse`?
 
-While both packages provide the same point estimates, `infuse` utilizes influence functions to provide a significant speed advantage, especially when calculating confidence intervals for large datasets or multiple outcomes.
+While both packages provide the same point estimates and standard errors, `infuse` utilizes influence functions to provide a significant speed advantage, especially when calculating confidence intervals for large datasets or multiple outcomes.
 
 ## Categorical & Binary Outcomes
 
-A core strength of the `infuse` package is its mathematical consistency: it uses the exact same engine for continuous, survival, and categorical outcomes. This unification allows researchers to compare "Net Benefit" across different types of endpoints using a single framework as we will see in the last section. For now lets look at another example with a binary outcome. 
+A core strength of the `infuse` package is its mathematical consistency: it uses the exact same engine for continuous, survival, and categorical outcomes. This unification allows one to compare "Net Benefit" across different types of endpoints using a single framework as we will see in the last section. For now lets look at another example with a binary outcome. 
 
 ### **The `respiratory` dataset**
 
@@ -279,56 +258,54 @@ We use data from a clinical trial of 111 patients with respiratory illness. Pati
 
 ```{r}
 data(respiratory)
-dat_v1 <- respiratory %>% 
-  dplyr::filter(visit == 1) %>% 
-  select(id, center, treat, sex, age, baseline, outcome)
+dat_v1 <- as.data.table(respiratory)[visit == 1, .(id, center, treat, sex, age, baseline, outcome)]
 
-head(dat_v1) %>% kbl() %>% kable_paper("striped", full_width = FALSE)
+head(dat_v1) |> kbl() |> kable_paper("striped", full_width = FALSE)
 ```
 
-**Step 1: Sow and Visualize**
+**Step 1: Infuse and Visualize**
 
-When we "sow" a binary outcome, the ECDF becomes a single-step function.
+Note that for binary outcomes we specify the level that represents a better outcome, in this case 1:
 
 ```{r}
-s <- sow(outcome~treat,data=dat_v1,treated = "A")
+s <- infuse(outcome(1)~treat,data=dat_v1,treated = "A")
+print(s)
+```
+
+By default, the function chooses a $\lambda = 0.5$ (this cannot be changed). When we "infuse" a binary outcome, the ECDF becomes a single-step function.
+
+
+```{r}
 plot(s)
 ```
 
-```{r}
-summary(s)
-```
 
-### Harvesting and reaping 
-
-Using the $\lambda = 0.5$ threshold (default for binary outcomes), we estimate the relevant probabilities:
+Next, we estimate the relevant probabilities:
 
 ```{r}
-h <- harvest(s)
-r <- reap(h)
-r %>% 
-  kbl(caption = "Net Benefit Analysis (Threshold = 0.5)") %>% 
-  kable_styling(bootstrap_options = "striped")
+h <- realise(s)
+h |>  kbl(caption = "Net Benefit Analysis (Threshold = 0.5)") |>  kable_styling(bootstrap_options = "striped")
 ```
 
 \
 
 ```{r}
-tab(r)
+tab(h)
 ```
 
 \
 
 **NTB as ARR**
 
-For binary outcomes, the Net Treatment Benefit (NTB) is mathematically identical to the Absolute Risk Reduction (ARR). This provides a bridge between traditional epidemiology and the Win/Loss framework.
+For binary outcomes, the Net Treatment Benefit (NTB) is mathematically identical to the Absolute Risk Reduction (ARR). This provides a bridge between traditional epidemiology and the Win Statistics framework.
 
 ```{r}
-p_P <- dat_v1 %>% dplyr::filter(treat == "P") %>% pull(outcome)
-p_P <- 1-mean(p_P)
-p_A <- dat_v1 %>% dplyr::filter(treat == "A") %>% pull(outcome)
-p_A <- 1-mean(p_A)
-round(p_P - p_A,4)
+means <- dat_v1[, .(risk = 1 - mean(outcome)), by = treat]
+# Extract the values and calculate the difference
+p_P <- means[treat == "P", risk]
+p_A <- means[treat == "A", risk]
+
+round(p_P - p_A, 4)
 ```
 
 This result is why the **GNNT (Generalized Number Needed to Treat)** in `infuse` is calculated as 1/NTB, directly mirroring the traditional 1/ARR formula.
@@ -340,7 +317,7 @@ We compare our point estimates with the `BuyseTest` package.
 
 ```{r}
 BT <-  BuyseTest(data = dat_v1,endpoint = "outcome",type = "bin",treatment = "treat",trace=0, operator = "<0")
-helper_buyse(BT) %>%kbl() %>% kable_paper("hover", full_width = FALSE)
+helper_buyse(BT) |>kbl() |> kable_paper("hover", full_width = FALSE)
 ```
 
 ### The Power of Custom Ordinal Outcomes
@@ -356,39 +333,47 @@ We define a 4-level scale of clinical improvement:
 
 
 ```{r}
-dat_v1 <- dat_v1 %>% 
-  mutate(combined_outcome = case_when(
-    baseline == 1 & outcome == 0 ~ 1,
-    baseline == 0 & outcome == 0 ~ 2,
-    baseline == 1 & outcome == 1 ~ 3,
-    baseline == 0 & outcome == 1 ~ 4
-  ))
+# Create the variable using fcase and convert to ordered factor in one block
+dat_v1 <- dat_v1[, combined_outcome := {
+  # 1. Logic for levels
+  res <- fcase(
+    baseline == 1 & outcome == 0, "L1",
+    baseline == 0 & outcome == 0, "L2",
+    baseline == 1 & outcome == 1, "L3",
+    baseline == 0 & outcome == 1, "L4"
+  )
+  # 2. Convert to ordered factor
+  ordered(res, levels = c("L1", "L2", "L3", "L4"))
+}]
 ```
 
 
 **Analyzing the Recovery Scale**
 
-We can now "sow" this new 4-level variable. In the harvest step, we set $\lambda = 1$ to indicate that a "win" requires moving at least one level up on this scale.
-
-The following plot shows the empirical CDF for the active treatment (Blue) and Placebo (Red) of the newly defined outcome:
+We can now "infuse" this new 4-level variable.
 
 ```{r}
-s_ext <- sow(combined_outcome~treat,data=dat_v1,treated = "A")
-plot(s_ext)
+s <- infuse(combined_outcome(high)~treat,data=dat_v1,treated = "A")
+print(s)
+```
+
+The `combined_outcome` is ordinal and by default, the function chooses a $\lambda = 1$ (this cannot be changed). High values are superior with `L4` being the best outcome. The following plot shows the empirical CDF for the active treatment (Blue) and Placebo (Red) of the newly defined outcome:
+
+```{r}
+plot(s)
 ```
 
 ```{r}
-h_ext <- harvest(s_ext,lambda=1)
-r <- reap(h_ext)
-r %>% 
-  kbl(caption = "Net Benefit Analysis (Threshold = 1)") %>% 
+h <- realise(s)
+h |> 
+  kbl(caption = "Net Benefit Analysis (Threshold = 1)") |> 
   kable_styling(bootstrap_options = "striped")
 ```
 
 \
 
 ```{r}
-tab(r)
+tab(h)
 ```
 
 \
@@ -397,8 +382,9 @@ tab(r)
 To ensure accuracy, we compare these ordinal results with the `BuyseTest` package using the "continuous" type (which handles ordinal levels) and a threshold of 1.
 
 ```{r}
-BT <-  BuyseTest(data = dat_v1,endpoint = "combined_outcome",type = "cont",treatment = "treat",trace=0, threshold = 1,operator = "<0")
-helper_buyse(BT) %>%kbl() %>% kable_paper("hover", full_width = FALSE)
+dat_v1[, combined_outcome_num := as.numeric(combined_outcome)]
+BT <-  BuyseTest(data = dat_v1,endpoint = "combined_outcome_num",type = "cont",treatment = "treat",trace=0, threshold = 1,operator = "<0")
+helper_buyse(BT) |>kbl() |> kable_paper("hover", full_width = FALSE)
 ```
 
 Results match perfectly with `infuse` point estimates.
@@ -423,68 +409,49 @@ $$\text{Outcome}=\text{Baseline Count}−\sum(\text{Seizures in 4 Periods})$$
 
 ```{r}
 # Data preparation
+# Convert to data.table
 data(epilepsy)
-d1 <- epilepsy %>% group_by(subject) %>% summarise(total_seizures = sum(seizure.rate))
-d2 <- epilepsy %>% select(subject, treatment, base) %>% distinct()
-dat_epi <- d2 %>% left_join(d1, by = "subject") %>% 
-  mutate(reduction = base - total_seizures)
+dat <- epilepsy
+setDT(dat)
 
-# Show a random sample of the processed data
-dat_epi %>% sample_n(5) %>% kbl() %>% kable_paper("striped", full_width = F)
+# 1. Summarise: Calculate total seizures per subject
+d1 <- dat[, .(total_seizures = sum(seizure.rate)), by = subject]
+
+# 2. Select & Distinct: Get unique baseline info
+d2 <- unique(dat[, .(subject, treatment, base)])
+
+# 3. Join & Mutate: Merge and calculate reduction
+dat_epi <- merge(d2, d1, by = "subject", all.x = TRUE)
+dat_epi[, reduction := base - total_seizures]
+
+# 4. Sample and Display
+dat_epi[sample(.N, 5)] |> 
+  kbl() |> 
+  kable_paper("striped", full_width = FALSE)
 ```
-
-**Step 1: Sow the Seeds**
-
-We define "high" as good because we are measuring the reduction in seizures.
+\
+In epilepsy trials, a small change in seizure count might be noise. We can set $\lambda$ to represent a clinically meaningful reduction. For example, let's say a "win" requires the Treated patient to have at least 5 fewer seizures than the Control patient. We also define "high" as good because we are measuring the reduction in seizures.
 
 ```{r}
-s_epi <- sow(reduction ~ treatment, data = dat_epi, treated = "Progabide", good = "high")
+s_epi <- infuse(reduction(5,high) ~ treatment, data = dat_epi, treated = "Progabide")
+print(s_epi)
+```
 
-# The plot will show the step-like nature of count data ECDFs
+```{r}
 plot(s_epi)
 ```
 
-```{r}
-summary(s_epi)
-```
-
-
-*### **Step 2: Harvest with Clinical Thresholds**
-
-In epilepsy trials, a small change in seizure count might be noise. We can set $\lambda$ to represent a clinically meaningful reduction. For example, let's say a "win" requires the Treated patient to have at least 5 fewer seizures than the Control patient.
 
 ```{r}
-# lambda = 5 seizures difference
-h_epi <- harvest(s_epi, lambda = 5)
-summary(h_epi)
-```
-
-**Step 3: Reap the Inference**
-
-Finally, we calculate the Win Ratio and Net Treatment Benefit for this seizure reduction threshold.
-
-```{r}
-reap(h_epi) %>% 
-  kbl(caption = "Seizure Reduction Analysis (Threshold = 5)") %>% 
-  kable_styling(bootstrap_options = "condensed")
+h_epi <- realise(s_epi)
+h_epi |>  kbl(caption = "Seizure Reduction Analysis (Threshold = 5)") |>  kable_styling(bootstrap_options = "condensed")
 ```
 
 \
 ```{r}
-reap(h_epi) %>% tab()
+tab(h_epi)
 ```
 
-\
-### Interpretation 
-
-Unlike a standard Poisson regression or T-test on counts, the infuse output gives us a direct "patient-centered" probability:
-
-1. Favorable Probability: The chance that a random patient on Progabide sees a better seizure reduction (by at least 5) than a random patient on Placebo.
-
-2. Net Benefit: The overall "surplus" of winners. If the Net Benefit is 0.29, it means for every 100 random comparisons, you expect 29 more "successful" reductions in the treated group than in the control.
-
-3. Win Ratio: The odds of picking a "winner" vs. a "loser" when comparing a random treated patient to a random control.
-    
 ### Benchmarking with `BuyseTest`
 
 We can verify these results against the standard pairwise approach. Note that for count data, we use type = "cont" (continuous) since the values are integers. 
@@ -499,7 +466,7 @@ BT_epi <- BuyseTest(data = dat_epi,
                     trace = 0)
 
 # Compare point estimates
-helper_buyse(BT_epi) %>% kbl() %>% kable_paper("hover", full_width = FALSE)
+helper_buyse(BT_epi) |> kbl() |> kable_paper("hover", full_width = FALSE)
 ```
 
 
@@ -507,44 +474,37 @@ helper_buyse(BT_epi) %>% kbl() %>% kable_paper("hover", full_width = FALSE)
 
 In this analysis, we ignore the baseline values and focus exclusively on the total number of seizures recorded during the 8-week follow-up period. This "post-baseline only" approach is common when baseline data is unavailable or when the primary interest is the absolute state of the patient at the end of the study.
 
-**Step 1: sow() — Defining "Good" as Low**
+**Step 1: infuse() — Defining "Good" as Low**
 
-Because we are measuring the number of seizures, a lower value represents a better clinical outcome. We specify this using the good = "low" argument.
+Because we are measuring the number of seizures, a lower value represents a better clinical outcome. We specify this using the good = "low" argument. We keep our clinical threshold of $\lambda=5$. In this context, a treated patient "wins" if they have at least 5 fewer seizures than the control patient.
 
 ```{r}
-s_raw <- sow(total_seizures ~ treatment, 
-             data = dat_epi, 
-             treated = "Progabide", 
-             good = "low")
+s <- infuse(total_seizures(5,low) ~ treatment,data = dat_epi,treated = "Progabide")
+print(s)
+```
 
+```{r}
+summary(s)
+```
+
+```{r}
 # The ECDF plot will now reflect that lower values are targeted for "wins"
-plot(s_raw)
+plot(s)
 ```
 
-**Step 2: harvest() — Setting the Threshold**
-
-We keep our clinical threshold of $\lambda=5$. In this context, a treated patient "wins" if they have at least 5 fewer seizures than the control patient.
-
-```{r}
-h_raw <- harvest(s_raw, lambda = 5)
-summary(h_raw)
-```
-
-**Step 3: reap() — Statistical Inference**
+**Step 2: realise() — Statistical Inference**
 
 We generate the final estimates and confidence intervals.
 
 ```{r}
-r_raw <- reap(h_raw)
-
-r_raw %>% 
-  kbl(caption = "Follow-up Seizure Rate Analysis (Threshold = 5, Lower is Better)") %>% 
-  kable_styling(bootstrap_options = "striped")
+h <- realise(s)
+h |>  kbl(caption = "Follow-up Seizure Rate Analysis (Threshold = 5, Lower is Better)") |>  kable_styling(bootstrap_options = "striped")
 ```
+
 
 \
 ```{r}
-tab(r_raw)
+tab(h)
 ```
 
 \
@@ -572,12 +532,12 @@ BT_raw <- BuyseTest(data = dat_epi,
                     operator = "<0",
                     trace = 0)
 
-helper_buyse(BT_raw) %>% 
-  kbl(caption = "Comparison with BuyseTest (Follow-up Only)") %>% 
+helper_buyse(BT_raw) |> 
+  kbl(caption = "Comparison with BuyseTest (Follow-up Only)") |> 
   kable_paper("hover", full_width = FALSE)
 ```
 
-This comparison confirms that the `infuse` influence-function engine correctly identifies "wins" based on the good = "low" parameter, yielding identical point estimates to the traditional pairwise comparison method.
+This comparison confirms that the `infuse` influence-function engine correctly identifies "wins" based on the good = "low" parameter, yielding identical point estimates and standard errors to the traditional pairwise comparison method.
 
 
 ## Time-to-Event (Survival) Outcomes.
@@ -588,54 +548,42 @@ One of the greatest advantages of `infuse` is that it treats survival outcomes w
 
 The aim of this study was to assess the use of ipilimumab after radiotherapy in patients with metastatic castration-resistant prostate cancer that progressed after docetaxel chemotherapy. Ipilimumab is a fully human monoclonal antibody that binds cytotoxic T-lymphocyte antigen 4 to enhance antitumour immunity. Participants were randomly assigned in a 1:1 ratio to receive bone-directed radiotherapy (8 Gy in one fraction) followed by either **ipilimumab** 10 mg/kg or **placebo** every 3 weeks for up to four doses. The outcome considered here was Progression-Free Survival in months (the censor indicator is `event`)
 
-**Step 1: sow() — The 1−KM Approach**
+**Step 1: infuse() — The 1−KM Approach**
 
-In `infuse`, survival outcomes are parsed using the standard `survival::Surv(time, event)` syntax. Unlike continuous data where every observation "jumps" the ECDF by exactly $1/n$ (if no ties are present), survival data is more nuanced. The `infuse` engine uses the Kaplan-Meier product-limit formula to determine the size of the jumps.
+In `infuse`, survival outcomes are parsed using the standard `Surv(time, event)` syntax. Unlike continuous data where every observation "jumps" the ECDF by exactly $1/n$ (if no ties are present), survival data is more nuanced. The `infuse` engine uses the Kaplan-Meier product-limit formula to determine the size of the jumps.
+\
+In oncology, a tiny difference in PFS (e.g., 2 days) might not be clinically meaningful. If we set $\lambda=3$ months, a treated patient only "wins" the comparison if they remained progression-free for at least 3 months longer than the control patient.
 
 ```{r}
 data(ipilimumab)
 dat_surv <- ipilimumab
 
-# Sow the survival data
+# infuse the survival data
 # We specify 'good = "high"' because longer survival is better
-s_surv <- sow(Surv(time, event) ~ arm, 
+s_surv <- infuse(Surv(time, event)(3,high) ~ arm, 
               data = dat_surv, 
-              treated = "ipilimumab", 
-              good = "high")
+              treated = "ipilimumab")
 ```
 
 
-The `plot()` method for a survival sow outcome displays the ECDF as $1−S_{KM}(t)$. 
+The `plot()` method for a survival infuse outcome displays the ECDF as $1−S_{KM}(t)$. 
 
 ```{r}
 plot(s_surv)
 ```
 
-**Step 2: harvest() — Clinical Thresholds in Time**
-
-In oncology, a tiny difference in PFS (e.g., 2 days) might not be clinically meaningful. With `harvest()`, we can set a threshold $\lambda$. If we set $\lambda=3$ months, a treated patient only "wins" the comparison if they remained progression-free for at least 3 months longer than the control patient.
-
-```{r}
-# Setting a 3-month clinical relevance threshold
-h_surv <- harvest(s_surv, lambda = 3)
-summary(h_surv)
-```
-
-**Step 3: reap() — Win Ratio & Net Treatment Benefit**
+**Step 2: realise() — Statistical Inference**
 
 Because the engine is consistent, the output for survival data is identical in format to our previous examples.
-
-```{r}
-results_surv <- reap(h_surv)
-
-results_surv %>% 
-  kbl(caption = "PFS Analysis (3-Month Threshold)") %>% 
-  kable_styling(bootstrap_options = "striped")
-```
-
 \
 ```{r}
-tab(results_surv)
+# Setting a 3-month clinical relevance threshold
+h_surv <- realise(s_surv)
+h_surv |>  kbl(caption = "PFS Analysis (3-Month Threshold)") |>  kable_styling(bootstrap_options = "striped")
+```
+\
+```{r}
+tab(h_surv)
 ```
 
 \
@@ -645,7 +593,8 @@ We validate the `infuse` results against the `BuyseTest` package using the type 
 
 ```{r}
 library(BuyseTest)
-dat_surv <- dat_surv %>% mutate(arm = factor(arm,levels=c("placebo","ipilimumab")))
+setDT(dat_surv)
+dat_surv[, arm := factor(arm, levels = c("placebo", "ipilimumab"))]
 BT_surv <- BuyseTest(data = dat_surv, 
                      endpoint = "time", 
                      type = "timetoevent",      # Specify survival type
@@ -654,8 +603,8 @@ BT_surv <- BuyseTest(data = dat_surv,
                      threshold = 3, 
                      trace = 0)
 
-helper_buyse(BT_surv) %>% 
-  kbl(caption = "Comparison with BuyseTest (Survival Data)") %>% 
+helper_buyse(BT_surv) |> 
+  kbl(caption = "Comparison with BuyseTest (Survival Data)") |> 
   kable_paper("hover", full_width = FALSE)
 ```
 
@@ -684,33 +633,30 @@ Let's combine two outcomes from the obstetrics dataset:
 
 2. Birthweight: The weight of the baby. Here, high is good.
 
-We will set a threshold of $\lambda=0.5$ for the binary outcome and $\lambda=500g$ for birth weight.
+The threshold of $\lambda=0.5$ for the binary outcome is set by default and we set $\lambda=500g$ for birthweight.
 
 ```{r}
-dat <- obstetrics %>% mutate(Preterm01 = if_else(PretermYN=="Yes",1,0)) %>% na.omit()
-# Step 1: Sow with multiple outcomes
-# Note: good = c("low", "high") because we want fewer preterm births 
-# and higher birth weights.
-s_multi <- sow(Preterm01 + Birthweight ~ Group, 
+dat <- obstetrics
+s_multi <- infuse(PretermYN("No ") + Birthweight(500) ~ Group, 
                 data = dat, 
-                treated = "T", 
-                good = c("low", "high"))
+                treated = "T")
 
-# Step 2: Harvest with two lambdas
-h_multi <- harvest(s_multi, lambda = c(0.5, 500))
+print(s_multi)
+```
 
-# Step 3: Reap with equal weights (50/50)
-r_multi <- reap(h_multi, w = c(0.5, 0.5))
 
-r_multi %>% arrange(Metric,Variable) %>% 
-  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") %>% 
+```{r}
+# Step 2: realise with two lambdas
+h_multi <- realise(s_multi)
+h_multi[order(Variable, Metric)] |>
+  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") |>
   kable_styling(bootstrap_options = "striped")
 ```
 
 
 **Interpreting the "NPO" Row**
 
-The `reap()` output adds a final row labelled NPO. This represents the "Global" treatment effect:
+The `realise()` output adds a final row labelled NPO. This represents the "Global" treatment effect:
 
 * **Global Net Benefit**: If the individual outcomes are $NB_{preterm}=0.10$ and $NB_{weight}=0.05$, an equally weighted NPO will result in a Global NB of 0.075.
 
@@ -728,41 +674,39 @@ BT_npo <- BuyseTest(data = dat,
                     trace = 0)
 
 # Use the helper to format and compare
-helper_buyse(BT_npo) %>% kbl() %>% kable_paper("hover")
+helper_buyse(BT_npo) |> kbl() |> kable_paper("hover")
 ```
 
 
-We can also use the `plot` method for the `reap` object:
+We can also use the `plot` method for the `realise` object:
 
 ```{r}
-plot(r_multi)
+plot(h_multi)
 ```
 
 And also generate a nice output table using:
 
 ```{r,results="asis"}
-tab(r_multi)
+tab(h_multi)
 ```
 
 
 **Customizing the "Clinical Voice"**
 
-If clinicians believe that preventing a preterm birth is twice as important as the birth weight, you can easily adjust the weights in the reap() function:
+If clinicians believe that preventing a preterm birth is twice as important as the birth weight, you can easily adjust the weights in the `realise()` function:
 
 
 ```{r}
-s_multi <- sow(Preterm01 + Birthweight ~ Group,data = dat,treated = "T",good = c("low", "high"))
-h_multi <- harvest(s_multi, lambda = c(0.5, 500))
-r_multi <- reap(h_multi, w = c(0.70, 0.30))
+h_multi <- realise(s_multi,w = c(0.70, 0.30))
 
-r_multi %>% filter(Variable == "NPO") %>% arrange(Metric,Variable) %>% 
-  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") %>% 
+h_multi[Variable == "NPO"][order(Metric, Variable)] |>
+  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") |>
   kable_styling(bootstrap_options = "striped")
 ```
 
 \
 ```{r}
-tab(r_multi)
+tab(h_multi)
 ```
 
 \
@@ -774,7 +718,7 @@ BT_npo <- BuyseTest(data = dat,
                     trace = 0)
 
 # Use the helper to format and compare
-helper_buyse(BT_npo) %>% kbl() %>% kable_paper("hover")
+helper_buyse(BT_npo) |> kbl() |> kable_paper("hover")
 ```
 
 
