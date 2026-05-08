@@ -72,8 +72,8 @@ param_gpd <- function(x, xs) {
   mlesh <- mle_fit$par[2]
 
   # --- 4. Tail Extension Calculation (extra_n) ---
-  fit <- c_ecdf_surv(x, xs)
-  surv_at_max <- 1 - max(fit$w)
+  fit <- c_ecdf_plus(x, xs)
+  surv_at_max <- 1 - max(fit$p)
 
   if (surv_at_max == 0) {
     extra_n <- 0
