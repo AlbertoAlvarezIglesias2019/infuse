@@ -21,43 +21,65 @@ plot.infuse <- function(x, ...) {
 
   # Ensure ggplot2 is available
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("The 'ggplot2' package is required to plot sow objects. Please install it.")
+    stop("The 'ggplot2' package is required to plot infuse objects. Please install it.")
   }
   library(ggplot2)
   library(data.table)
 
   dt <- copy(x$data)
+  dt$ttt <- dt$time
+  dt$ttt[dt$status_ext==1] <- dt$time_ext[dt$status_ext==1]
+  dt$sss <- dt$status
+  dt$sss[dt$status_ext==1] <- 1
+
+  dt[, c("prob", "ord") := {
+    res <- c_ecdf_plus(ttt, sss)
+    list(res$p, res$o)
+  }, by = .(name, arm)]
+
 
   # --- NEW: Anchor points for 0 and 1 tails ---
   # We expand the time range by 5% on each side to show the horizontal "tails"
-  rng <- diff(range(dt$time, na.rm = TRUE))
-  rng <- if (length(rng) == 0 || is.na(rng) || rng == 0) 1 else rng
+  #rng <- diff(range(dt$ttt, na.rm = TRUE))
+  #rng <- if (length(rng) == 0 || is.na(rng) || rng == 0) 1 else rng
 
-  dt_bounds <- dt[, .(
-    t_min = min(time, na.rm = TRUE) - rng * 0.05,
-    t_max = max(time, na.rm = TRUE) + rng * 0.05
-  ), by = .(name, arm)]
+  #dt_bounds <- dt[, .(
+  #  t_min = min(ttt, na.rm = TRUE) - rng * 0.05,
+  #  t_max = max(ttt, na.rm = TRUE) + rng * 0.05
+  #), by = .(name, arm)]
+
+  dt_bounds <- dt[, {
+    r <- diff(range(ttt, na.rm = TRUE))
+    rng <- if (length(r) == 0 || is.na(r) || r <= 0) 1 else r
+
+    .SD[, .(
+      t_min = min(ttt, na.rm = TRUE) - rng * 0.05,
+      t_max = max(ttt, na.rm = TRUE) + rng * 0.05
+    ), by = arm]
+  }, by = name]
+
 
   anchors <- rbind(
-    dt_bounds[, .(name, arm, time = t_min, prob = 0, p_i_dtail = 0)],
-    dt_bounds[, .(name, arm, time = t_max, prob = 1, p_i_dtail = 0)]
+    dt_bounds[, .(name, arm, ttt = t_min, prob = 0, status_ext = 0)],
+    dt_bounds[, .(name, arm, ttt = t_max, prob = 1, status_ext = 0)]
   )
 
   dt <- rbindlist(list(dt, anchors), fill = TRUE)
 
   # Ensure data is sorted by arm and time for proper ECDF step plotting
-  setorder(dt, name, arm, time,prob)
+  setorder(dt, name, arm, ttt,prob)
 
   # --- NEW: Build Annotation Data for Lambda ---
   # 1. Find the horizontal center of each facet
   lambda_dt <- dt[, .(
-    x_min = min(time, na.rm = TRUE),
-    x_max = max(time, na.rm = TRUE)
+    x_min = min(ttt, na.rm = TRUE),
+    x_max = max(ttt, na.rm = TRUE),
+    lambda = mean(lambda,na.rm=TRUE)
   ), by = name]
 
   # 2. Merge the lambda values from metadata
   meta_dt <- x$metadata
-  lambda_dt <- merge(lambda_dt, meta_dt[, .(name, lambda)], by = "name")
+  lambda_dt <- merge(lambda_dt, meta_dt[, .(name)], by = "name")
 
   # 3. Calculate segment coordinates (centered) and put them at the top (y = 1.04)
   lambda_dt[, x_mid := (x_min + x_max) / 2]
@@ -68,7 +90,7 @@ plot.infuse <- function(x, ...) {
 
 
   # 1. Base faceted plot
-  p <- ggplot(dt, aes(x = time, y = prob, color = arm, group = arm))+
+  p <- ggplot(dt, aes(x = ttt, y = prob, color = arm, group = arm))+
 
     # --- NEW: Add the horizontal reference line at y = 1 ---
     geom_hline(yintercept = 1, linetype = "dashed", color = "#B0B0B0", linewidth = 0.6) +
@@ -120,15 +142,15 @@ plot.infuse <- function(x, ...) {
 
 
   # 2. Highlight the extended tail in black (across all facets)
-  if (any(dt$p_i_dtail == 1)) {
+  if (any(dt$status_ext == 1)) {
 
     # Safely extract tail points + the final non-tail point, grouped by BOTH name and arm
     tail_data <- dt[, {
-      idx_non_tail <- which(p_i_dtail == 0)
-      idx_tail <- which(p_i_dtail == 1)
+      idx_non_tail <- which(status_ext == 0)
+      idx_tail <- which(status_ext == 1)
 
       # Get the index of the last observed point before the tail begins
-      last_obs_idx <- if(length(idx_non_tail) > 0) idx_non_tail[which.max(time[idx_non_tail])] else integer(0)
+      last_obs_idx <- if(length(idx_non_tail) > 0) idx_non_tail[which.max(ttt[idx_non_tail])] else integer(0)
 
       .SD[c(last_obs_idx, idx_tail)]
     }, by = .(name, arm)]
@@ -151,7 +173,9 @@ plot.infuse <- function(x, ...) {
 #' @export
 print.infuse <- function(x, ...) {
 
-  dt <- copy(x$metadata)
+  dt <- unique(x$data[, .(name, type, lambda, direction)])[x$metadata, on = "name"]
+
+  #dt <- copy(x$metadata)
 
   cat("Object of class 'infuse' (Prepared Win/Loss Data)\n")
   cat(rep("=", 46), "\n", sep = "")
@@ -209,10 +233,10 @@ print.infuse <- function(x, ...) {
 #' @param ... Additional arguments (ignored).
 #' @export
 summary.infuse <- function(x, ...) {
-  cat("\nStatistical Summary of Sown Data\n")
+  cat("\nStatistical Summary of Infused Data\n")
   cat(rep("=", 54), "\n", sep = "")
   dt <- copy(x$data)
-  setorder(dt, name, arm, time,prob)
+  #setorder(dt, name, arm, time,prob)
 
   tt <- dt[, .(mean_value = mean(time, na.rm = TRUE)), by = .(name, arm)]
   tt_wide <- dcast(tt[name %in% x$metadata$name], name ~ arm, value.var = "mean_value")
@@ -233,9 +257,10 @@ summary.infuse <- function(x, ...) {
   cat("\n--- Point estimates for Favourable and Unfavorable pairs ---\n")
   cat(rep("-", 60), "\n", sep = "")
 
-  res <- copy(x$metadata)
-  res <- res[,.(name,f,u)]
-  setnames(res,c("name","f","u"),c("Variable","Favorable","Unfavorable"))
+  #res <- copy(x$metadata)
+  #res <- res[,.(name,f,u)]
+  res <- unique(x$data[, .(name, f_pe, u_pe)])
+  setnames(res,c("name","f_pe","u_pe"),c("Variable","Favorable","Unfavorable"))
 
   print(as.data.frame(res), row.names = FALSE)
 
@@ -264,7 +289,9 @@ plotinf <- function(x, vari = "f", ...) {
 #' @export
 plotinf.infuse <- function(x,vari = "f", ...) {
 
-  dt <- x$data[,.(name,arm,f,u)]
+  dt <- x$data[,.(name,arm,f_ifval,u_ifval)]
+  setnames(dt,c("f_ifval","u_ifval"),c("f","u"))
+
   dt <- dt[, IF := get(vari)]
   # Note: Influence for GNNT is usually handled via Delta Method on Net Benefit,
   # but for visualization, showing the 'n' influence is most informative.
@@ -282,6 +309,6 @@ plotinf.infuse <- function(x,vari = "f", ...) {
          subtitle = "Identifying high-impact observations",
          y = paste("Influence Value (", col_name, ")", sep=""), x = "")
 
-  #return(plotly::ggplotly(p) %>% plotly::layout(showlegend = TRUE))
+  #return(plotly::ggplotly(p) |> plotly::layout(showlegend = TRUE))
   return(p)
 }
