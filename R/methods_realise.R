@@ -186,3 +186,61 @@ tab.realise <- function(x, ...) {
 }
 
 
+
+#' @export
+knit_print.realise <- function(x, inline = FALSE, ...) {
+
+  dt_clean <- copy(x)
+
+  # Custom formatting function based on Metric type
+  fmt <- function(val, metric) {
+    fifelse(metric == "GNNT", sprintf("%.0f", val), sprintf("%.4f", val))
+  }
+
+  dt_clean[, `:=`(
+    Estimate_fmt = fmt(Estimate, Metric),
+    SE_fmt       = sprintf("%.4f", Se),
+    CI_fmt       = paste0("[", fmt(Lower, Metric), ", ", fmt(Upper, Metric), "]"),
+    PValue_fmt   = ifelse(is.na(PValue) | PValue == "<NA>", "—", PValue)
+  )]
+
+  # 2. Select final display columns (dropping 'Variable' for section headers)
+  display_dt <- dt_clean[, .(
+    Metric,
+    `Estimate` = Estimate_fmt,
+    `SE`       = SE_fmt,
+    `95% CI`   = CI_fmt,
+    `p-value`  = PValue_fmt
+  )]
+
+  # 3. Get row counts for group header indexing
+  var_groups <- setNames(
+    as.numeric(table(x$Variable)[unique(x$Variable)]),
+    unique(x$Variable)
+  )
+
+  # 4. Generate kableExtra table
+  out <- display_dt |>
+    kbl(
+      align = c("l", "r", "r", "c", "r"),
+      caption = "<b>Table 1:</b> Treatment Effect Metrics Across Clinical Outcomes"
+    ) |>
+    kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+      full_width = FALSE,
+      position = "left",
+      font_size = 14
+    ) |>
+    pack_rows(index = var_groups, label_row_css = "background-color: #e9ecef; color: #212529; font-weight: bold;") |>
+    row_spec(0, bold = TRUE, background = "#343a40", color = "white") |>
+    column_spec(1, width = "14em") |>
+    column_spec(4, width = "12em")
+
+  out
+}
+
+#' @export
+print.realise <- function(x, ...) {
+  print(knit_print.realise(x, ...))
+}
+
