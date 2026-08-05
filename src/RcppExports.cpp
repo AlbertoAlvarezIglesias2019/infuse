@@ -10,6 +10,33 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// c_IF_fav_censoring
+DataFrame c_IF_fav_censoring(CharacterVector arm, NumericVector time, IntegerVector status, double lambda_val);
+RcppExport SEXP _infuse_c_IF_fav_censoring(SEXP armSEXP, SEXP timeSEXP, SEXP statusSEXP, SEXP lambda_valSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< CharacterVector >::type arm(armSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type status(statusSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_val(lambda_valSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_IF_fav_censoring(arm, time, status, lambda_val));
+    return rcpp_result_gen;
+END_RCPP
+}
+// c_IF_fav_no_censoring
+DataFrame c_IF_fav_no_censoring(CharacterVector arm, NumericVector time, double lambda_val);
+RcppExport SEXP _infuse_c_IF_fav_no_censoring(SEXP armSEXP, SEXP timeSEXP, SEXP lambda_valSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< CharacterVector >::type arm(armSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_val(lambda_valSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_IF_fav_no_censoring(arm, time, lambda_val));
+    return rcpp_result_gen;
+END_RCPP
+}
 // c_ecdf_plus
 List c_ecdf_plus(NumericVector x, Nullable<IntegerVector> xs);
 RcppExport SEXP _infuse_c_ecdf_plus(SEXP xSEXP, SEXP xsSEXP) {
@@ -63,12 +90,29 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// c_fav
+double c_fav(CharacterVector arm, NumericVector time, IntegerVector status, double lambda_val);
+RcppExport SEXP _infuse_c_fav(SEXP armSEXP, SEXP timeSEXP, SEXP statusSEXP, SEXP lambda_valSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< CharacterVector >::type arm(armSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type time(timeSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type status(statusSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_val(lambda_valSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_fav(arm, time, status, lambda_val));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_infuse_c_IF_fav_censoring", (DL_FUNC) &_infuse_c_IF_fav_censoring, 4},
+    {"_infuse_c_IF_fav_no_censoring", (DL_FUNC) &_infuse_c_IF_fav_no_censoring, 3},
     {"_infuse_c_ecdf_plus", (DL_FUNC) &_infuse_c_ecdf_plus, 2},
     {"_infuse_c_ecdf_predict", (DL_FUNC) &_infuse_c_ecdf_predict, 3},
     {"_infuse_c_ecdf_predict_less", (DL_FUNC) &_infuse_c_ecdf_predict_less, 3},
     {"_infuse_c_extendtail", (DL_FUNC) &_infuse_c_extendtail, 5},
+    {"_infuse_c_fav", (DL_FUNC) &_infuse_c_fav, 4},
     {NULL, NULL, 0}
 };
 
