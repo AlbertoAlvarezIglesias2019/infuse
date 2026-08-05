@@ -22,6 +22,10 @@ using namespace Rcpp;
 //'   censoring, this matches the standard ECDF.
 //'   \item \code{w}: The probability mass or "weight" assigned to each observation.
 //'   \item \code{o}: The 1-based ordering index used during the internal calculation.
+//'   \item \code{pi}: Numeric vector mapping the proportion of the non-NA cohort
+//'         remaining at risk (\eqn{\hat{\pi}(t)}) at that individual's time point.
+//'   \item \code{lambda_jump}: Numeric vector containing the hazard jump (\eqn{d\hat{\Lambda}(t)}),
+//'         equivalent to the status indicator divided by the current size of the risk set.
 //' }
 //'
 //' @details
@@ -136,6 +140,8 @@ List c_ecdf_plus(NumericVector x, Nullable<IntegerVector> xs = R_NilValue) {
 
   NumericVector p_sorted(n, NA_REAL);
   NumericVector w_sorted(n, NA_REAL);
+  NumericVector pi_sorted(n, NA_REAL);          // Track sorted proportion at risk
+  NumericVector lambda_jump_sorted(n, NA_REAL); // Track sorted hazard jumps
   IntegerVector o(n);
 
   // 4. Calculate only for non-NA values
@@ -150,6 +156,11 @@ List c_ecdf_plus(NumericVector x, Nullable<IntegerVector> xs = R_NilValue) {
     current_S *= (1.0 - hazard_ratio);
     p_sorted[i] = 1.0 - current_S;
     o[i] = original_idx + 1;
+
+    // Calculate new metrics
+    // (Using n_non_na as the denominator since NAs are excluded from the risk set entirely)
+    pi_sorted[i] = risk_set / static_cast<double>(n_non_na);
+    lambda_jump_sorted[i] = hazard_ratio;
   }
 
   // Handle NA indices in the 'o' vector
@@ -160,19 +171,27 @@ List c_ecdf_plus(NumericVector x, Nullable<IntegerVector> xs = R_NilValue) {
   // 5. Map results back to the original input order
   NumericVector p_final(n);
   NumericVector w_final(n);
+  NumericVector pi_final(n);
+  NumericVector lambda_jump_final(n);
   for (int i = 0; i < n; ++i) {
     if (i < n_non_na) {
       p_final[idx[i]] = p_sorted[i];
       w_final[idx[i]] = w_sorted[i];
+      pi_final[idx[i]] = pi_sorted[i];
+      lambda_jump_final[idx[i]] = lambda_jump_sorted[i];
     } else {
       p_final[idx[i]] = NA_REAL;
       w_final[idx[i]] = NA_REAL;
+      pi_final[idx[i]] = NA_REAL;
+      lambda_jump_final[idx[i]] = NA_REAL;
     }
   }
 
   return List::create(
     Named("p") = p_final,
     Named("w") = w_final,
-    Named("o") = o
+    Named("o") = o,
+    Named("pi") = pi_final,
+    Named("lambda_jump") = lambda_jump_final
   );
 }
