@@ -56,7 +56,7 @@ This approach is mathematically equivalent to Generalized Pairwise Comparisons (
 
 The `infuse` package utilises a two-stage workflow:
 
-1. `infuse()`: The foundation. It partitions data, standardizes arms, and pre-calculates the distributions (ECDF/Kaplan-Meier). It returns a structured S3 object.
+1. `infuse()`: The foundation. It curates data, standardizes arms, and pre-calculates the influence values for favorable and unfavorable pairs. It returns a structured S3 object.
 
 2. `realise()`: The engine. It calculates point estimates, influence-function-based standard errors, confidence intervals, and p-values for both individual and weighted Non-Prioritized Outcomes (NPO).
 
@@ -127,7 +127,7 @@ The mean score of the treated is 105 vs a mean score of the controls of 99 indic
 
 * The **Win Ratio (w)** is the ratio: 0.64/0.14=4.6.
 
-The `plotinf()` method helps identifying observations that are potentially **influential** in the estimation. We use the `vari = "f"` argument for *Favorable* summaries and `vari = "f"` for *Unfavorable* summaries:
+The `plotinf()` method helps identifying observations that are potentially **influential** in the estimation. We use the `vari = "f"` argument for *Favorable* summaries and `vari = "u"` for *Unfavorable* summaries:
 
 ```{r}
 plotinf(s,vari = "f")
@@ -140,9 +140,10 @@ plotinf(s,vari = "f")
 We now "realise" the inference to get the formal statistical results. This converts the raw influence values into a tidy table with point estimates, confidence intervals, and p-values.
 
 
-```{r}
+```{r, results = 'asis'}
 h <- realise(s)
-h |> kbl(caption = "Net Benefit Analysis (Threshold = 3)") |> kable_styling(bootstrap_options = "striped")
+print(h)
+#h |> kbl(caption = "Net Benefit Analysis (Threshold = 3)") |> kable_styling(bootstrap_options = "striped")
 ```
 
 Both the Net Treatment Benefit NTB and the Win Ratio WR are statistically significant (p<0.05).
@@ -165,8 +166,6 @@ tab(h)
 We compare these results with those obtained using Generalised Pairwise Comparisons:
 
 ```{r}
-library(BuyseTest)
-library(data.table)
 helper_buyse <- function(BT) {
   o1 <- as.data.table(confint(BT, statistic = "favorable"))[, Metric := "Favorable"]
   o2 <- as.data.table(confint(BT, statistic = "unfavorable"))[, Metric := "Unfavorable"]
@@ -223,9 +222,10 @@ plot(s)
 Finally we get the estimates and the confidence intervals:
 
 
-```{r}
+```{r, results = 'asis'}
 h <- realise(s)
-h |>  kbl(caption = "Net Benefit Analysis (Threshold = 500)") |>  kable_styling(bootstrap_options = "striped")
+print(h)
+#h |>  kbl(caption = "Net Benefit Analysis (Threshold = 500)") |>  kable_styling(bootstrap_options = "striped")
 ```
 
 ```{r}
@@ -236,7 +236,7 @@ tab(h)
 
 To validate the `infuse` engine, we compare our point estimates with the established `BuyseTest` package.
 
-Initially, a direct comparison might show slight differences if the dataset contains missing values (NA). `BuyseTest` and `infuse` handle missingness differently by default. However, when we ensure a clean dataset, the results match perfectly:
+Initially, a direct comparison might show slight differences if the dataset contains missing values (NA). `BuyseTest` and `infuse` handle missingness differently by default. However, when we ensure a clean dataset, the results are very similar:
 
 ```{r}
 BT <-  BuyseTest(data = dat |> na.omit(),endpoint = "Birthweight",type = "cont",treatment = "Group",threshold = 500,trace=0)
@@ -245,11 +245,11 @@ helper_buyse(BT) |>kbl() |> kable_paper("hover", full_width = FALSE)
 
 ### Why use `infuse`?
 
-While both packages provide the same point estimates and standard errors, `infuse` utilizes influence functions to provide a significant speed advantage, especially when calculating confidence intervals for large datasets or multiple outcomes.
+While both packages provide the same point estimates and similar standard errors, `infuse` utilizes influence functions to provide a significant speed advantage, especially when calculating confidence intervals for large datasets or multiple outcomes.
 
 ## Categorical & Binary Outcomes
 
-A core strength of the `infuse` package is its mathematical consistency: it uses the exact same engine for continuous, survival, and categorical outcomes. This unification allows one to compare "Net Benefit" across different types of endpoints using a single framework as we will see in the last section. For now lets look at another example with a binary outcome. 
+A core strength of the `infuse` package is its mathematical consistency: it uses the exact same engine for continuous, binary, ordinal, and survival outcomes. This unification allows one to compare "Net Benefit" across different types of endpoints using a single framework as we will see in the last section. For now lets look at another example with a binary outcome. 
 
 ### **The `respiratory` dataset**
 
@@ -282,9 +282,10 @@ plot(s)
 
 Next, we estimate the relevant probabilities:
 
-```{r}
+```{r, results = 'asis'}
 h <- realise(s)
-h |>  kbl(caption = "Net Benefit Analysis (Threshold = 0.5)") |>  kable_styling(bootstrap_options = "striped")
+print(h)
+#h |>  kbl(caption = "Net Benefit Analysis (Threshold = 0.5)") |>  kable_styling(bootstrap_options = "striped")
 ```
 
 \
@@ -363,11 +364,12 @@ The `combined_outcome` is ordinal and by default, the function chooses a $\lambd
 plot(s)
 ```
 
-```{r}
+```{r, results = 'asis'}
 h <- realise(s)
-h |> 
-  kbl(caption = "Net Benefit Analysis (Threshold = 1)") |> 
-  kable_styling(bootstrap_options = "striped")
+print(h)
+#h |> 
+#  kbl(caption = "Net Benefit Analysis (Threshold = 1)") |> 
+#  kable_styling(bootstrap_options = "striped")
 ```
 
 \
@@ -442,14 +444,15 @@ plot(s_epi)
 ```
 
 
-```{r}
-h_epi <- realise(s_epi)
-h_epi |>  kbl(caption = "Seizure Reduction Analysis (Threshold = 5)") |>  kable_styling(bootstrap_options = "condensed")
+```{r, results = 'asis'}
+h <- realise(s_epi)
+print(h)
+#h_epi |>  kbl(caption = "Seizure Reduction Analysis (Threshold = 5)") |>  kable_styling(bootstrap_options = "condensed")
 ```
 
 \
 ```{r}
-tab(h_epi)
+tab(h)
 ```
 
 ### Benchmarking with `BuyseTest`
@@ -496,9 +499,10 @@ plot(s)
 
 We generate the final estimates and confidence intervals.
 
-```{r}
+```{r, results = 'asis'}
 h <- realise(s)
-h |>  kbl(caption = "Follow-up Seizure Rate Analysis (Threshold = 5, Lower is Better)") |>  kable_styling(bootstrap_options = "striped")
+print(h)
+#h |>  kbl(caption = "Follow-up Seizure Rate Analysis (Threshold = 5, Lower is Better)") |>  kable_styling(bootstrap_options = "striped")
 ```
 
 
@@ -519,8 +523,6 @@ The "Reduction from Baseline" model (from the previous example) accounts for the
 We validate these results against `BuyseTest`. Note that when using `BuyseTest` for "lower is better" outcomes with a threshold, we ensure the logic matches the infuse favorability settings.
 
 ```{r}
-library(BuyseTest)
-
 # Benchmarking raw seizure counts
 # In BuyseTest, higher is better by default; 
 # we use 'operator = "<0"' to indicate lower is better for a 'win'
@@ -576,14 +578,15 @@ plot(s_surv)
 
 Because the engine is consistent, the output for survival data is identical in format to our previous examples.
 \
-```{r}
+```{r, results = 'asis'}
 # Setting a 3-month clinical relevance threshold
-h_surv <- realise(s_surv)
-h_surv |>  kbl(caption = "PFS Analysis (3-Month Threshold)") |>  kable_styling(bootstrap_options = "striped")
+h <- realise(s_surv)
+print(h)
+#h_surv |>  kbl(caption = "PFS Analysis (3-Month Threshold)") |>  kable_styling(bootstrap_options = "striped")
 ```
 \
 ```{r}
-tab(h_surv)
+tab(h)
 ```
 
 \
@@ -645,12 +648,13 @@ print(s_multi)
 ```
 
 
-```{r}
+```{r, results = 'asis'}
 # Step 2: realise with two lambdas
-h_multi <- realise(s_multi)
-h_multi[order(Variable, Metric)] |>
-  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") |>
-  kable_styling(bootstrap_options = "striped")
+h <- realise(s_multi)
+print(h)
+#h_multi[order(Variable, Metric)] |>
+#  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") |>
+#  kable_styling(bootstrap_options = "striped")
 ```
 
 
@@ -681,13 +685,13 @@ helper_buyse(BT_npo) |> kbl() |> kable_paper("hover")
 We can also use the `plot` method for the `realise` object:
 
 ```{r}
-plot(h_multi)
+plot(h)
 ```
 
 And also generate a nice output table using:
 
 ```{r,results="asis"}
-tab(h_multi)
+tab(h)
 ```
 
 
@@ -696,17 +700,14 @@ tab(h_multi)
 If clinicians believe that preventing a preterm birth is twice as important as the birth weight, you can easily adjust the weights in the `realise()` function:
 
 
-```{r}
-h_multi <- realise(s_multi,w = c(0.70, 0.30))
-
-h_multi[Variable == "NPO"][order(Metric, Variable)] |>
-  kbl(caption = "Global Analysis: Preterm Birth & Birthweight") |>
-  kable_styling(bootstrap_options = "striped")
+```{r, results = 'asis'}
+h <- realise(s_multi,w = c(0.70, 0.30))
+print(h)
 ```
 
 \
 ```{r}
-tab(h_multi)
+tab(h)
 ```
 
 \
